@@ -10,8 +10,19 @@
     "devUrl": "http://127.0.0.1:1420"
   },
   "app": {
-    "windows": [{ "title": "久坐提醒", "width": 520, "height": 700, "resizable": true }],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "label": "main",
+        "title": "久坐提醒",
+        "width": 520,
+        "height": 700,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["default"]
+    }
   },
   "bundle": { "active": false, "targets": "all", "icon": ["icons/CL.png"] }
 }

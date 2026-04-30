@@ -19,6 +19,16 @@
 | 强制专注模式 | 在特定提醒状态下限制窗口关闭，避免误跳过 |
 | 扩展能力 | 预留**补丁（Patch）**与**插件（Plugin）**目录及加载机制；运行时编译产物不入库 |
 
+## 界面预览
+
+### 图1：主界面
+
+![主界面：提醒设置与下次提醒时间等配置](docs/screenshots/main-interface.png)
+
+### 图2：提醒界面
+
+![提醒界面：全屏提醒文案与活动倒计时](docs/screenshots/reminder-interface.png)
+
 ## 技术栈
 
 - 前端：React 18、Vite 5、Ant Design 5、TypeScript

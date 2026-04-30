@@ -43,3 +43,13 @@ export interface ReminderRuntime {
   primaryCenterX: number | null;
   primaryCenterY: number | null;
 }
+
+/** 中文注释：托盘菜单点击后由后端 emit 的字段名（与 Rust 一致）。 */
+export type TrayToggleField = "autoStart" | "enabled" | "lockOnFinish";
+
+export interface TrayFieldTogglePayload {
+  field: TrayToggleField;
+}
+
+/** 中文注释：主窗口关闭后的行为记忆：`ask` 每次询问，`tray` 最小化到托盘，`exit` 退出进程。 */
+export type CloseBehaviorPreference = "ask" | "tray" | "exit";

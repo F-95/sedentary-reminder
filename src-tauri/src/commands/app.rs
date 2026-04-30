@@ -1,5 +1,7 @@
 ﻿use serde::Serialize;
-use tauri::Manager;
+use tauri::AppHandle;
+
+use crate::tray::TrayMenuState;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,21 +14,6 @@ pub struct AppInfo {
 #[cfg(windows)]
 fn to_wide_null(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-#[cfg(windows)]
-fn copy_to_u16_array(dst: &mut [u16], s: &str) {
-    let wide: Vec<u16> = s.encode_utf16().collect();
-    let cap = dst.len();
-    if cap == 0 {
-        return;
-    }
-    let n = wide.len().min(cap.saturating_sub(1));
-    dst[..n].copy_from_slice(&wide[..n]);
-    // 保持末尾为 0（默认填充 0），确保 Windows 侧按 WCHAR 字符串读取正常。
-    if n < cap {
-        dst[n] = 0;
-    }
 }
 
 #[tauri::command]
@@ -127,48 +114,38 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
     }
 }
 
-/// 中文注释：推送系统通知（Windows），用于提醒“距离下一次触发还有 1 分钟”。
+/// 中文注释：将前端 `ReminderConfig` 中的三个布尔同步到托盘勾选菜单，避免 Rust 读取 localStorage。
 #[tauri::command]
-pub fn push_system_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::Shell::{
-            Shell_NotifyIconW, NOTIFYICONDATAW, NIF_INFO, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_MODIFY,
-        };
+pub fn sync_tray_menu(
+    tray: tauri::State<'_, TrayMenuState>,
+    auto_start: bool,
+    reminder_enabled: bool,
+    lock_on_finish: bool,
+) -> Result<(), String> {
+    let guard = tray
+        .inner
+        .lock()
+        .map_err(|_| "托盘状态加锁失败".to_string())?;
+    let Some(handles) = guard.as_ref() else {
+        return Ok(());
+    };
+    handles
+        .auto_start
+        .set_checked(auto_start)
+        .map_err(|e| format!("同步托盘「开机启动」勾选失败: {e}"))?;
+    handles
+        .reminder_enabled
+        .set_checked(reminder_enabled)
+        .map_err(|e| format!("同步托盘「启动提醒」勾选失败: {e}"))?;
+    handles
+        .lock_on_finish
+        .set_checked(lock_on_finish)
+        .map_err(|e| format!("同步托盘「提醒结束后锁屏」勾选失败: {e}"))?;
+    Ok(())
+}
 
-        let window = app
-            .get_webview_window("main")
-            .ok_or_else(|| "未找到主窗口用于推送通知".to_string())?;
-
-        let hwnd = window
-            .hwnd()
-            .map_err(|e| format!("获取窗口句柄失败: {e}"))?;
-
-        let mut nid = NOTIFYICONDATAW::default();
-        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
-        nid.hWnd = HWND(hwnd.0 as *mut std::ffi::c_void);
-        nid.uID = 1;
-        nid.uFlags = NIF_INFO | NIF_TIP;
-        nid.uCallbackMessage = 0;
-        nid.dwInfoFlags = NIIF_INFO;
-
-        copy_to_u16_array(&mut nid.szInfoTitle, &title);
-        copy_to_u16_array(&mut nid.szInfo, &body);
-        copy_to_u16_array(&mut nid.szTip, &title);
-
-        let ok_add = unsafe { Shell_NotifyIconW(NIM_ADD, &mut nid).as_bool() };
-        let _ = unsafe { Shell_NotifyIconW(NIM_MODIFY, &mut nid) };
-
-        if !ok_add {
-            return Err("Shell_NotifyIconW(NIM_ADD) 失败".to_string());
-        }
-        Ok(())
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = (app, title, body);
-        Err("当前平台暂不支持系统通知".to_string())
-    }
+/// 中文注释：退出进程（供前端「退出程序」或记忆为退出时使用）。
+#[tauri::command]
+pub fn exit_app(app: AppHandle) {
+    app.exit(0);
 }

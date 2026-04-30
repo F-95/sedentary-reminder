@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"主窗口默认权限：核心能力、事件、窗口隐藏与自定义业务命令","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-hide","core:window:allow-show","core:window:allow-set-focus","core:window:allow-unminimize","core:window:allow-is-visible","core:webview:allow-webview-show","core:webview:allow-webview-hide","core:event:allow-listen","core:event:allow-emit","core:event:allow-emit-to","notification:default"]}}

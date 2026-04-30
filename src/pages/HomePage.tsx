@@ -1,16 +1,23 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { Space, message } from "antd";
-import type { ReminderConfig, ReminderRule } from "@/types/global";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { Button, Checkbox, Modal, Space, message } from "antd";
+import type { CloseBehaviorPreference, ReminderConfig, ReminderRule, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
 import ReminderFullscreenPage from "@/pages/ReminderFullscreenPage";
 import ReminderSettingsPage from "@/pages/ReminderSettingsPage";
 import {
+  CLOSE_BEHAVIOR_STORAGE_KEY,
+  EVENT_MAIN_CLOSE_REQUESTED,
+  EVENT_TRAY_FIELD_TOGGLE,
+  exitApp,
   finishActivityAndLock,
   getReminderRuntime,
   listDefaultSlogans,
-  pushSystemNotification,
-  setReminderWindowMode,
   setAutoStartEnabled,
+  setReminderWindowMode,
   startReminderSession,
+  syncTrayMenu,
   updateNextTrigger
 } from "@/utils/tauri";
 
@@ -114,8 +121,43 @@ function formatNextLabel(timestamp: number | null): string {
   return new Date(timestamp).toLocaleString("zh-CN");
 }
 
+/** 中文注释：「提前 1 分钟」使用操作系统原生通知（Windows Toast 等），不在应用窗口内展示。 */
+async function notifyOneMinuteBeforeReminder(): Promise<void> {
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const permission = await requestPermission();
+      granted = permission === "granted";
+    }
+    if (!granted) {
+      return;
+    }
+    await sendNotification({
+      title: "久坐提醒",
+      body: "距离下次提醒还有1分钟，请提前活动并做好准备。"
+    });
+  } catch {
+    // 中文注释：非 Tauri 环境或通知插件不可用时静默跳过，避免打断定时逻辑。
+  }
+}
+
+function isTrayToggleField(value: string): value is TrayToggleField {
+  return value === "autoStart" || value === "enabled" || value === "lockOnFinish";
+}
+
+/** 中文注释：读取主窗口关闭后的行为偏好（未设置则每次询问）。 */
+function readCloseBehaviorPreference(): CloseBehaviorPreference {
+  const raw = localStorage.getItem(CLOSE_BEHAVIOR_STORAGE_KEY);
+  if (raw === "tray" || raw === "exit" || raw === "ask") {
+    return raw;
+  }
+  return "ask";
+}
+
 export default function HomePage(): JSX.Element {
   const [api, contextHolder] = message.useMessage();
+  const apiRef = useRef(api);
+  apiRef.current = api;
   const [config, setConfig] = useState<ReminderConfig>(() => {
     const raw = localStorage.getItem(REMINDER_CONFIG_KEY);
     if (!raw) {
@@ -138,10 +180,84 @@ export default function HomePage(): JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const triggerInFlightRef = useRef<boolean>(false);
   const lastMinuteNotifiedForTriggerAtRef = useRef<number | null>(null);
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(REMINDER_CONFIG_KEY, JSON.stringify(config));
   }, [config]);
+
+  // 中文注释：与系统托盘勾选状态对齐（配置仅存于前端 localStorage）。
+  useEffect(() => {
+    void syncTrayMenu(config.autoStartEnabled, config.enabled, config.lockOnReminderFinishEnabled).catch(() => {
+      // 中文注释：托盘尚未创建或权限不足时静默失败，避免打断主流程。
+    });
+  }, [config.autoStartEnabled, config.enabled, config.lockOnReminderFinishEnabled]);
+
+  // 中文注释：订阅托盘菜单与主窗口关闭事件（仅 Tauri 环境有效）。
+  useEffect(() => {
+    let cancelled = false;
+    let unlistenTray: (() => void) | undefined;
+    let unlistenClose: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        unlistenTray = await listen<TrayFieldTogglePayload>(EVENT_TRAY_FIELD_TOGGLE, (event) => {
+          const field = event.payload.field;
+          if (!isTrayToggleField(field)) {
+            return;
+          }
+          setConfig((prev) => {
+            if (field === "autoStart") {
+              return { ...prev, autoStartEnabled: !prev.autoStartEnabled };
+            }
+            if (field === "enabled") {
+              return { ...prev, enabled: !prev.enabled };
+            }
+            return { ...prev, lockOnReminderFinishEnabled: !prev.lockOnReminderFinishEnabled };
+          });
+        });
+        if (cancelled) {
+          unlistenTray();
+          return;
+        }
+
+        unlistenClose = await listen(EVENT_MAIN_CLOSE_REQUESTED, () => {
+          const behavior = readCloseBehaviorPreference();
+          if (behavior === "tray") {
+            void getCurrentWindow()
+              .hide()
+              .catch((error: unknown) => {
+                apiRef.current.error(`隐藏到托盘失败：${String(error)}`);
+              });
+            return;
+          }
+          if (behavior === "exit") {
+            void exitApp().catch((error: unknown) => {
+              apiRef.current.error(`退出失败：${String(error)}`);
+            });
+            return;
+          }
+          setRememberCloseChoice(false);
+          setClosePromptOpen(true);
+        });
+        if (cancelled) {
+          unlistenTray();
+          unlistenClose();
+        }
+      } catch {
+        // 中文注释：非 Tauri 或权限不足时忽略。
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlistenTray?.();
+      unlistenClose?.();
+    };
+    // 中文注释：仅在挂载时注册全局监听；message 实例取首次闭包即可。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     void setAutoStartEnabled(config.autoStartEnabled).catch((error) => {
@@ -305,7 +421,7 @@ export default function HomePage(): JSX.Element {
       if (!triggerInFlightRef.current && msLeft > 0 && msLeft <= LAST_MINUTE_NOTIFICATION_MS) {
         if (lastMinuteNotifiedForTriggerAtRef.current !== nextTriggerAt) {
           lastMinuteNotifiedForTriggerAtRef.current = nextTriggerAt;
-          void pushSystemNotification("久坐提醒", "距离下次提醒还有1分钟，请提前活动并做好准备。");
+          void notifyOneMinuteBeforeReminder();
         }
       }
 
@@ -322,7 +438,7 @@ export default function HomePage(): JSX.Element {
       if (!triggerInFlightRef.current && msLeft > 0 && msLeft <= LAST_MINUTE_NOTIFICATION_MS) {
         if (lastMinuteNotifiedForTriggerAtRef.current !== nextTriggerAt) {
           lastMinuteNotifiedForTriggerAtRef.current = nextTriggerAt;
-          void pushSystemNotification("久坐提醒", "距离下次提醒还有1分钟，请提前活动并做好准备。");
+          void notifyOneMinuteBeforeReminder();
         }
       }
 
@@ -339,9 +455,54 @@ export default function HomePage(): JSX.Element {
     };
   }, [api, config.enabled, nextTriggerAt, reminderVisible]);
 
+  const applyCloseToTray = (): void => {
+    if (rememberCloseChoice) {
+      localStorage.setItem(CLOSE_BEHAVIOR_STORAGE_KEY, "tray");
+    }
+    setClosePromptOpen(false);
+    void getCurrentWindow()
+      .hide()
+      .catch((error: unknown) => {
+        api.error(`隐藏到托盘失败：${String(error)}`);
+      });
+  };
+
+  const applyCloseExit = (): void => {
+    if (rememberCloseChoice) {
+      localStorage.setItem(CLOSE_BEHAVIOR_STORAGE_KEY, "exit");
+    }
+    setClosePromptOpen(false);
+    void exitApp().catch((error: unknown) => {
+      api.error(`退出失败：${String(error)}`);
+    });
+  };
+
   return (
     <>
       {contextHolder}
+      <Modal
+        title="关闭主窗口"
+        open={closePromptOpen}
+        onCancel={() => setClosePromptOpen(false)}
+        footer={null}
+        destroyOnClose
+        maskClosable
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <span>请选择：最小化到系统托盘（后台继续运行），或退出程序。</span>
+          <Checkbox checked={rememberCloseChoice} onChange={(e) => setRememberCloseChoice(e.target.checked)}>
+            记住我的选择
+          </Checkbox>
+          <Space wrap>
+            <Button type="primary" onClick={applyCloseToTray}>
+              最小化到系统托盘
+            </Button>
+            <Button danger onClick={applyCloseExit}>
+              退出程序
+            </Button>
+          </Space>
+        </Space>
+      </Modal>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <ReminderSettingsPage config={config} nextTriggerLabel={nextTriggerLabel} onChange={setConfig} />
       </Space>
