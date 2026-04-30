@@ -58,7 +58,10 @@ npm run tauri build
 ## Windows 安装包（GitHub Releases）
 
 - **下载地址**：[Releases · F-95/sedentary-reminder](https://github.com/F-95/sedentary-reminder/releases)
-- **构建方式**：向仓库推送 `v*` 标签（如 `v0.1.0`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上自动执行 `tauri build`，并创建 **草稿 Release（Draft）**，附带 NSIS 安装包（`*-setup.exe`）与 MSI（`*.msi`）。
+- **构建方式**：
+  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.0`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **草稿 Release（Draft）**，上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
+  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.0`），可在不重新打标签的情况下再次构建并上传资源。
+- **说明**：工作流必须使用 `tauri-apps/tauri-action` 的 **`@v0` 或 `@action-x.y.z` 标签**（例如 `@action-v0.6.2`）；该仓库不存在 `@v1`，若写成 `@v1` 会导致工作流无法正确加载 Action，Release 不会出现。
 - **正式发布**：在 GitHub 打开对应草稿 Release，补充说明后点击 **Publish release**。未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
 
 以下为可直接粘贴到 Release 说明中的模板（按需修改）：

@@ -1,10 +1,17 @@
 # 在推送 v* 标签时于 Windows 上构建 Tauri 安装包并上传至 GitHub Releases（草稿）
+# 注意：tauri-action 仓库无 @v1 标签，必须使用 @v0 或 @action-x.y.z，否则工作流无法解析 Action。
 name: release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "已存在的 Git 标签（例如 v0.1.0），用于检出代码并关联 Release"
+        required: true
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -15,6 +22,10 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # 手动运行时按输入检出对应标签；标签推送事件使用默认 ref
+          ref: ${{ github.event.inputs.tag_name || github.ref }}
+          fetch-depth: 0
 
       - name: 配置 Node.js
         uses: actions/setup-node@v4
@@ -36,13 +47,15 @@ jobs:
         run: npm ci
 
       - name: 构建并创建 Release 草稿
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ github.event.inputs.tag_name || github.ref_name }}
           releaseName: "久坐提醒 v__VERSION__"
           releaseBody: "Windows 安装包见下方 Assets。NSIS 为安装向导，MSI 为企业/静默部署常用格式。"
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: false
+          # action.yml 中参数名为 includeUpdaterJson（非 uploadUpdaterJson）
+          includeUpdaterJson: false
+          tauriScript: npm run tauri
