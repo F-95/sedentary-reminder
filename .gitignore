@@ -19,6 +19,8 @@ plugins/**/backend/
 plugins/**/frontend/
 
 # ========== 不应提交（编辑器 / 系统杂项）==========
+# Cursor IDE 本地规则与技能（Rules / Skills），属个人或本机配置
+.cursor/
 .vscode/
 .DS_Store
 Thumbs.db

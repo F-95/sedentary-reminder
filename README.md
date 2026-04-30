@@ -64,7 +64,7 @@ npm run tauri build
 ## Git 提交建议（摘要）
 
 - **宜提交**：应用源码、`package-lock.json`、`Cargo.lock`、Tauri/工具链配置、图标与文档、补丁/插件的 `manifest` 与 schema 等。
-- **勿提交**：`node_modules/`、`dist/`、`src-tauri/target/`、`.vite/`、`.env*`、日志与 IDE 私有个性化配置、补丁/插件已编译的 `backend`/`frontend` 产物。
+- **勿提交**：`node_modules/`、`dist/`、`src-tauri/target/`、`.vite/`、`.cursor/`、`.env*`、日志与 IDE 私有个性化配置、补丁/插件已编译的 `backend`/`frontend` 产物。
 
 细节以项目根目录 [`.gitignore`](.gitignore) 为准。
 
