@@ -5,7 +5,8 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, Emitter, Manager, Wry};
+use tauri::{App, AppHandle, Emitter, Manager, Wry};
+use crate::core::app_state::AppState;
 
 /// 中文注释：前端监听的托盘字段切换事件名（与 `src/utils/tauri.ts` 常量一致）。
 pub const EVENT_TRAY_FIELD_TOGGLE: &str = "tray-field-toggle";
@@ -18,6 +19,24 @@ const MENU_ID_AUTO_START: &str = "tray_auto_start";
 const MENU_ID_REMINDER_ENABLED: &str = "tray_reminder_enabled";
 const MENU_ID_LOCK_ON_FINISH: &str = "tray_lock_on_finish";
 const MENU_ID_QUIT: &str = "tray_quit";
+
+/// 中文注释：根据提醒运行态构建托盘悬停提示文案。
+fn build_tray_tooltip(app: &AppHandle) -> String {
+    let state = app.state::<AppState>();
+    let runtime = match state.reminder_runtime.lock() {
+        Ok(guard) => guard,
+        Err(_) => return "久坐提醒\n提醒状态获取失败".to_string(),
+    };
+    if !runtime.reminder_enabled {
+        return "久坐提醒\n提醒未启用".to_string();
+    }
+    let label = runtime
+        .next_trigger_label
+        .clone()
+        .or_else(|| runtime.next_trigger_at_ms.map(|ms| format!("{ms}")))
+        .unwrap_or_else(|| "计算中".to_string());
+    format!("久坐提醒\n下次提醒时间：{label}")
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,6 +138,10 @@ pub fn setup_tray(app: &App) -> Result<(), String> {
             let _ = app_handle.emit_to("main", EVENT_TRAY_FIELD_TOGGLE, payload);
         })
         .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Enter { .. } = event {
+                let tooltip = build_tray_tooltip(&tray.app_handle());
+                let _ = tray.set_tooltip(Some(tooltip));
+            }
             if let TrayIconEvent::DoubleClick { button, .. } = event {
                 if button == MouseButton::Left {
                     if let Some(w) = tray.app_handle().get_webview_window("main") {

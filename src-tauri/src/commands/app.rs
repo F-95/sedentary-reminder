@@ -118,10 +118,20 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
 #[tauri::command]
 pub fn sync_tray_menu(
     tray: tauri::State<'_, TrayMenuState>,
+    app_state: tauri::State<'_, crate::core::app_state::AppState>,
     auto_start: bool,
     reminder_enabled: bool,
     lock_on_finish: bool,
 ) -> Result<(), String> {
+    {
+        // 中文注释：缓存提醒启用状态，供托盘悬停提示文案实时读取。
+        let mut runtime = app_state
+            .reminder_runtime
+            .lock()
+            .map_err(|_| "提醒运行态加锁失败".to_string())?;
+        runtime.reminder_enabled = reminder_enabled;
+    }
+
     let guard = tray
         .inner
         .lock()

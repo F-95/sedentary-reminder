@@ -293,14 +293,14 @@ export default function HomePage(): JSX.Element {
     }
     if (!config.enabled || reminderVisible) {
       setNextTriggerAt(null);
-      void updateNextTrigger(null);
+      void updateNextTrigger(null, null);
       return;
     }
 
     const candidateTimes = config.rules.map((rule) => getNextFromRule(rule, Date.now())).filter((item): item is number => !!item);
     const next = candidateTimes.length ? Math.min(...candidateTimes) : null;
     setNextTriggerAt(next);
-    void updateNextTrigger(next);
+    void updateNextTrigger(next, next ? formatNextLabel(next) : null);
 
     if (!next) {
       return;

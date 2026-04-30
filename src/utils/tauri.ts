@@ -26,8 +26,8 @@ export async function setReminderWindowMode(active: boolean): Promise<void> {
   return invoke("set_reminder_window_mode", { active });
 }
 
-export async function updateNextTrigger(triggerAtMs: number | null): Promise<void> {
-  return invoke("update_next_trigger", { triggerAtMs });
+export async function updateNextTrigger(triggerAtMs: number | null, triggerLabel: string | null): Promise<void> {
+  return invoke("update_next_trigger", { triggerAtMs, triggerLabel });
 }
 
 export async function startReminderSession(sessionId: string): Promise<void> {

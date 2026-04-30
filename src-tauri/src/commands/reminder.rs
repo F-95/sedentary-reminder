@@ -275,12 +275,17 @@ pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppSt
 }
 
 #[tauri::command]
-pub fn update_next_trigger(state: tauri::State<AppState>, trigger_at_ms: Option<i64>) -> Result<(), String> {
+pub fn update_next_trigger(
+    state: tauri::State<AppState>,
+    trigger_at_ms: Option<i64>,
+    trigger_label: Option<String>,
+) -> Result<(), String> {
     let mut runtime = state
         .reminder_runtime
         .lock()
         .map_err(|_| "提醒运行态加锁失败".to_string())?;
     runtime.next_trigger_at_ms = trigger_at_ms;
+    runtime.next_trigger_label = trigger_label;
     Ok(())
 }
 
