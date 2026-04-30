@@ -45,7 +45,7 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Row justify="space-between" align="middle">
           <Col>
-            <Typography.Text strong>开机自启（AutoStart）</Typography.Text>
+            <Typography.Text strong>开机自启</Typography.Text>
           </Col>
           <Col>
             <Switch checked={config.autoStartEnabled} onChange={(checked) => onChange({ ...config, autoStartEnabled: checked })} />
@@ -94,7 +94,7 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
             />
           </Form.Item>
 
-          <Form.Item label={<Typography.Text strong>随机提醒文案</Typography.Text>}>
+          <Form.Item label={<Typography.Text strong>提醒文案</Typography.Text>}>
             <Space direction="vertical" style={{ width: "100%" }}>
               <Switch
                 checked={config.randomTextEnabled}

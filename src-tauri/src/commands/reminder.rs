@@ -1,11 +1,63 @@
 use serde::Serialize;
-use tauri::{LogicalSize, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 use std::{thread, time::Duration};
 
 use crate::core::{app_state::AppState, reminder_lock};
 
 #[cfg(windows)]
 use crate::platform::win_enterprise;
+
+/// 中文注释：计算所有显示器的物理像素外接矩形（虚拟桌面联合区域），坐标系与 Tauri `Monitor::position` / `size` 一致。
+/// 若 `available_monitors` 为空则回退为仅主显示器矩形，避免无屏可枚举时崩溃。
+fn virtual_desktop_union_phys(window: &WebviewWindow) -> Result<(i32, i32, u32, u32), String> {
+    let monitors = window
+        .available_monitors()
+        .map_err(|e| format!("枚举显示器失败: {e}"))?;
+
+    if !monitors.is_empty() {
+        let mut min_left = i32::MAX;
+        let mut min_top = i32::MAX;
+        let mut max_right = i32::MIN;
+        let mut max_bottom = i32::MIN;
+        for m in monitors {
+            let p = m.position();
+            let s = m.size();
+            let right = p.x.saturating_add(s.width as i32);
+            let bottom = p.y.saturating_add(s.height as i32);
+            min_left = min_left.min(p.x);
+            min_top = min_top.min(p.y);
+            max_right = max_right.max(right);
+            max_bottom = max_bottom.max(bottom);
+        }
+        let w = max_right.saturating_sub(min_left).max(1) as u32;
+        let h = max_bottom.saturating_sub(min_top).max(1) as u32;
+        return Ok((min_left, min_top, w, h));
+    }
+
+    let Some(primary) = window
+        .primary_monitor()
+        .map_err(|e| format!("读取主显示器失败: {e}"))?
+    else {
+        return Err("未检测到任何显示器".to_string());
+    };
+    let p = primary.position();
+    let s = primary.size();
+    Ok((p.x, p.y, s.width.max(1), s.height.max(1)))
+}
+
+/// 中文注释：主显示器中心点的屏幕物理坐标；无主屏时返回联合矩形中心作为兜底。
+fn primary_monitor_center_phys(window: &WebviewWindow, union_left: i32, union_top: i32, union_w: u32, union_h: u32) -> (i32, i32) {
+    if let Ok(Some(primary)) = window.primary_monitor() {
+        let p = primary.position();
+        let s = primary.size();
+        let cx = p.x.saturating_add(s.width as i32 / 2);
+        let cy = p.y.saturating_add(s.height as i32 / 2);
+        return (cx, cy);
+    }
+    let cx = union_left.saturating_add(union_w as i32 / 2);
+    let cy = union_top.saturating_add(union_h as i32 / 2);
+    (cx, cy)
+}
 
 /// 中文注释：Win32 企业强控相关调用必须在 GUI 主线程执行（Win11 上 WH_KEYBOARD_LL 等更稳定）。
 #[cfg(windows)]
@@ -117,11 +169,13 @@ pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppSt
         .ok_or_else(|| "未找到主窗口".to_string())?;
 
     if active {
-        let primary_center;
-        let locked_rect;
-        // 中文注释：提醒窗口固定大小 520x700，便于 UI 展示与窗口管理。
-        let desired_width: u32 = 520;
-        let desired_height: u32 = 700;
+        let (union_left, union_top, union_w, union_h) = virtual_desktop_union_phys(&window)?;
+        let (cx, cy) = primary_monitor_center_phys(&window, union_left, union_top, union_w, union_h);
+        let primary_center = Some((
+            (cx - union_left) as f64,
+            (cy - union_top) as f64,
+        ));
+        let locked_rect = Some((union_left, union_top, union_w, union_h));
 
         window.show().map_err(|error| format!("显示窗口失败: {error}"))?;
         window.unminimize().map_err(|error| format!("恢复窗口失败: {error}"))?;
@@ -131,32 +185,17 @@ pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppSt
         window.set_maximizable(false).map_err(|error| format!("禁用最大化失败: {error}"))?;
         window.set_minimizable(false).map_err(|error| format!("禁用最小化失败: {error}"))?;
         window.set_closable(false).map_err(|error| format!("禁用关闭失败: {error}"))?;
-        // 中文注释：固定大小后，不需要根据多显示器联合矩形计算覆盖区域。
         window
             .set_fullscreen(false)
             .map_err(|error| format!("退出系统全屏失败: {error}"))?;
 
-        // 中文注释：固定大小后，只在主显示器居中定位。
-        let (left, top) = if let Ok(Some(primary_monitor)) = window.primary_monitor() {
-            let primary_position = primary_monitor.position();
-            let primary_size = primary_monitor.size();
-            (
-                primary_position.x + (primary_size.width as i32 - desired_width as i32) / 2,
-                primary_position.y + (primary_size.height as i32 - desired_height as i32) / 2,
-            )
-        } else {
-            (0, 0)
-        };
-
         window
-            .set_position(PhysicalPosition::new(left, top))
+            .set_position(PhysicalPosition::new(union_left, union_top))
             .map_err(|error| format!("窗口位置设置失败: {error}"))?;
         window
-            .set_size(PhysicalSize::new(desired_width, desired_height))
+            .set_size(PhysicalSize::new(union_w, union_h))
             .map_err(|error| format!("窗口尺寸设置失败: {error}"))?;
 
-        locked_rect = Some((left, top, desired_width, desired_height));
-        primary_center = Some((desired_width as f64 / 2.0, desired_height as f64 / 2.0));
         let _ = window.set_focus();
 
         #[cfg(windows)]
@@ -165,8 +204,7 @@ pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppSt
                 .hwnd()
                 .map_err(|e| format!("获取窗口句柄失败: {e}"))?
                 .0 as usize;
-            // 中文注释：固定窗口大小，无需覆盖虚拟屏联合矩形。
-            let cover = None;
+            let cover = Some((union_left, union_top, union_w, union_h));
             win_dispatch_on_main_thread(&app, move || {
                 win_enterprise::enterprise_layer_activate(hwnd_bits, cover)
                     .map_err(|e| format!("企业强控启用失败: {e}"))
