@@ -1,12 +1,36 @@
-﻿node_modules/
+﻿# ========== 不应提交（构建产物 / 依赖 / 本地机密）==========
+node_modules/
 dist/
-.vscode/
-.DS_Store
-*.log
+src-tauri/target/
+
+# Vite 预构建缓存（Pre-bundling），随 `npm run dev` 自动生成
+.vite/
+
+# 环境变量与密钥
 .env
 .env.*
-src-tauri/target/
+!.env.example
+
+# ========== 不应提交（补丁 / 插件运行时二进制与打包前端）==========
+# 说明：manifest.json、rollback.json、schema 等元数据可提交；已编译的 backend/、frontend/ 为运行时产物，勿入库。
 patches/**/backend/
 patches/**/frontend/
 plugins/**/backend/
 plugins/**/frontend/
+
+# ========== 不应提交（编辑器 / 系统杂项）==========
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+
+# JetBrains / Visual Studio 等（按需保留团队共享配置时再单独放行）
+.idea/
+*.suo
+*.user
+
+# 测试与工具缓存
+coverage/
+.eslintcache
+*.tsbuildinfo
