@@ -1,0 +1,14 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Patch Manifest",
+  "type": "object",
+  "required": ["version", "platform", "baseVersion", "entry", "order"],
+  "properties": {
+    "version": { "type": "string", "pattern": "^v\\d+\\.\\d+\\.\\d+(-[a-z0-9-]+)?$" },
+    "platform": { "enum": ["windows", "macos", "linux", "all"] },
+    "baseVersion": { "type": "string" },
+    "entry": { "type": "string" },
+    "order": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}
