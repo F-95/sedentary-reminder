@@ -1,7 +1,8 @@
 [package]
-name = "久坐提醒"
+# crate 名称必须为 ASCII，避免 Windows 构建产物路径与 CI 异常
+name = "sedentary-reminder"
 version = "0.1.0"
-description = "久坐提醒"
+description = "Sedentary Reminder - 久坐提醒桌面应用"
 authors = ["you"]
 edition = "2021"
 

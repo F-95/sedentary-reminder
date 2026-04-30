@@ -1,0 +1,46 @@
+# 在推送 v* 标签时于 Windows 上构建 Tauri 安装包并上传至 GitHub Releases（草稿）
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 安装 Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Cargo 依赖
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: 安装前端依赖（锁定版本）
+        run: npm ci
+
+      - name: 构建并创建 Release 草稿
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "久坐提醒 v__VERSION__"
+          releaseBody: "Windows 安装包见下方 Assets。NSIS 为安装向导，MSI 为企业/静默部署常用格式。"
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: false
