@@ -55,6 +55,26 @@ npm run tauri dev
 npm run tauri build
 ```
 
+## Windows 安装包（GitHub Releases）
+
+- **下载地址**：[Releases · F-95/sedentary-reminder](https://github.com/F-95/sedentary-reminder/releases)
+- **构建方式**：向仓库推送 `v*` 标签（如 `v0.1.0`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上自动执行 `tauri build`，并创建 **草稿 Release（Draft）**，附带 NSIS 安装包（`*-setup.exe`）与 MSI（`*.msi`）。
+- **正式发布**：在 GitHub 打开对应草稿 Release，补充说明后点击 **Publish release**。未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
+
+以下为可直接粘贴到 Release 说明中的模板（按需修改）：
+
+```markdown
+## 久坐提醒 v0.1.0
+
+### 安装
+- 推荐一般用户：下载 `*-setup.exe`，按向导安装（当前用户目录，无需管理员）。
+- 企业/静默场景：可选用 `.msi`。
+
+### 说明
+- 首次运行若出现 SmartScreen，请选择「仍要运行」或按企业策略放行。
+- 功能与行为详见本仓库 README。
+```
+
 ## 常用脚本
 
 | 命令 | 作用 |
