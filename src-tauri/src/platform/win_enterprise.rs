@@ -25,13 +25,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetAncestor, IsChild, IsWindow, SetWindowPos, SetWindowsHookExW,
-    UnhookWindowsHookEx, BringWindowToTop, SetForegroundWindow, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT,
-    HHOOK, GA_ROOT, LLKHF_ALTDOWN, LLKHF_EXTENDED, WH_KEYBOARD_LL, WH_MOUSE_LL, HWND_NOTOPMOST,
-    HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WindowFromPoint, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL,
-    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_XBUTTONDOWN, WM_XBUTTONUP, WM_HOTKEY,
+    BringWindowToTop, CallNextHookEx, GetAncestor, IsChild, IsWindow, SetForegroundWindow,
+    SetWindowPos, SetWindowsHookExW, UnhookWindowsHookEx, WindowFromPoint, GA_ROOT, HHOOK,
+    HWND_NOTOPMOST, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_ALTDOWN, LLKHF_EXTENDED, MSLLHOOKSTRUCT,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_HOTKEY, WM_KEYDOWN,
+    WM_KEYUP, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN,
+    WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
 
 // 中文注释：HHOOK 未实现 Send，仅存指针位模式（bit pattern）。
@@ -83,7 +83,11 @@ fn hit_is_inside_overlay(hit: HWND, root: HWND) -> bool {
     }
 }
 
-unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn low_level_keyboard_proc(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     if code < 0 {
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
     }
@@ -92,10 +96,7 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
     }
 
     let msg = wparam.0 as u32;
-    let is_key_event = matches!(
-        msg,
-        WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP
-    );
+    let is_key_event = matches!(msg, WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP);
 
     if !is_key_event {
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
@@ -139,7 +140,8 @@ unsafe extern "system" fn low_level_keyboard_proc(code: i32, wparam: WPARAM, lpa
     if vk == VK_F4.0 && (any_alt_down() || info.flags.contains(LLKHF_ALTDOWN)) {
         return LRESULT(1);
     }
-    if info.flags.contains(LLKHF_ALTDOWN) && (vk == VK_TAB.0 || vk == VK_ESCAPE.0 || vk == VK_F4.0) {
+    if info.flags.contains(LLKHF_ALTDOWN) && (vk == VK_TAB.0 || vk == VK_ESCAPE.0 || vk == VK_F4.0)
+    {
         return LRESULT(1);
     }
 
@@ -168,7 +170,11 @@ fn is_swallowed_mouse_message(msg: u32) -> bool {
     )
 }
 
-unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+unsafe extern "system" fn low_level_mouse_proc(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
     if code < 0 {
         return unsafe { CallNextHookEx(None, code, wparam, lparam) };
     }
@@ -197,13 +203,18 @@ unsafe extern "system" fn low_level_mouse_proc(code: i32, wparam: WPARAM, lparam
 
 /// 安装企业强控钩子（键盘 + 鼠标）。`root` 为提醒顶层 HWND（通常为 Tauri 主窗口）。
 pub fn enterprise_hooks_install(root: HWND) -> Result<(), String> {
-    let mut kb_guard = KEYBOARD_HOOK.lock().map_err(|_| "键盘钩子互斥锁失败".to_string())?;
-    let mut mouse_guard = MOUSE_HOOK.lock().map_err(|_| "鼠标钩子互斥锁失败".to_string())?;
+    let mut kb_guard = KEYBOARD_HOOK
+        .lock()
+        .map_err(|_| "键盘钩子互斥锁失败".to_string())?;
+    let mut mouse_guard = MOUSE_HOOK
+        .lock()
+        .map_err(|_| "鼠标钩子互斥锁失败".to_string())?;
     if kb_guard.is_some() || mouse_guard.is_some() {
         return Ok(());
     }
 
-    let hmod = unsafe { GetModuleHandleW(None) }.map_err(|e| format!("GetModuleHandleW 失败: {e:?}"))?;
+    let hmod =
+        unsafe { GetModuleHandleW(None) }.map_err(|e| format!("GetModuleHandleW 失败: {e:?}"))?;
     let hinstance = windows::Win32::Foundation::HINSTANCE::from(hmod);
 
     let kb_hook = unsafe {
@@ -225,12 +236,7 @@ pub fn enterprise_hooks_install(root: HWND) -> Result<(), String> {
     }
 
     let mouse_hook = match unsafe {
-        SetWindowsHookExW(
-            WH_MOUSE_LL,
-            Some(low_level_mouse_proc),
-            Some(hinstance),
-            0,
-        )
+        SetWindowsHookExW(WH_MOUSE_LL, Some(low_level_mouse_proc), Some(hinstance), 0)
     } {
         Ok(h) => h,
         Err(e) => {
@@ -259,23 +265,35 @@ pub fn enterprise_hooks_uninstall() -> Result<(), String> {
         *overlay = None;
     }
 
-    let mut kb_guard = KEYBOARD_HOOK.lock().map_err(|_| "键盘钩子互斥锁失败".to_string())?;
+    let mut kb_guard = KEYBOARD_HOOK
+        .lock()
+        .map_err(|_| "键盘钩子互斥锁失败".to_string())?;
     if let Some(raw) = kb_guard.take() {
         let hook = HHOOK(raw as *mut std::ffi::c_void);
-        unsafe { UnhookWindowsHookEx(hook) }.map_err(|e| format!("UnhookWindowsHookEx(KEYBOARD) 失败: {e:?}"))?;
+        unsafe { UnhookWindowsHookEx(hook) }
+            .map_err(|e| format!("UnhookWindowsHookEx(KEYBOARD) 失败: {e:?}"))?;
     }
 
-    let mut mouse_guard = MOUSE_HOOK.lock().map_err(|_| "鼠标钩子互斥锁失败".to_string())?;
+    let mut mouse_guard = MOUSE_HOOK
+        .lock()
+        .map_err(|_| "鼠标钩子互斥锁失败".to_string())?;
     if let Some(raw) = mouse_guard.take() {
         let hook = HHOOK(raw as *mut std::ffi::c_void);
-        unsafe { UnhookWindowsHookEx(hook) }.map_err(|e| format!("UnhookWindowsHookEx(MOUSE) 失败: {e:?}"))?;
+        unsafe { UnhookWindowsHookEx(hook) }
+            .map_err(|e| format!("UnhookWindowsHookEx(MOUSE) 失败: {e:?}"))?;
     }
 
     Ok(())
 }
 
 /// 将窗口置于 HWND_TOPMOST，并铺满给定物理矩形，尽量压在任务栏与其他壳层窗口之上。
-pub fn apply_topmost_cover(hwnd: HWND, x: i32, y: i32, width: u32, height: u32) -> Result<(), String> {
+pub fn apply_topmost_cover(
+    hwnd: HWND,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
     let flags = SWP_SHOWWINDOW;
     unsafe {
         SetWindowPos(
@@ -341,7 +359,9 @@ fn subclass_install(hwnd: HWND) -> Result<(), String> {
     if SUBCLASS_INSTALLED.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    let ok = unsafe { SetWindowSubclass(hwnd, Some(enterprise_subclass_proc), SUBCLASS_UID, 0).as_bool() };
+    let ok = unsafe {
+        SetWindowSubclass(hwnd, Some(enterprise_subclass_proc), SUBCLASS_UID, 0).as_bool()
+    };
     if !ok {
         SUBCLASS_INSTALLED.store(false, Ordering::SeqCst);
         return Err("SetWindowSubclass 失败".to_string());
@@ -437,7 +457,10 @@ fn unregister_system_hotkeys(hwnd: HWND) {
 }
 
 /// 中文注释：企业层一键启用（须在 GUI 主线程调用）。`hwnd_bits` 为 `HWND.0` 指针位模式；`cover` 为 `Some` 时使用虚拟屏联合矩形置顶。
-pub fn enterprise_layer_activate(hwnd_bits: usize, cover: Option<(i32, i32, u32, u32)>) -> Result<(), String> {
+pub fn enterprise_layer_activate(
+    hwnd_bits: usize,
+    cover: Option<(i32, i32, u32, u32)>,
+) -> Result<(), String> {
     let hwnd = HWND(hwnd_bits as *mut std::ffi::c_void);
     let result = (|| {
         if let Some((x, y, w, h)) = cover {

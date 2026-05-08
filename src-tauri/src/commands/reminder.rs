@@ -1,8 +1,10 @@
 use serde::Serialize;
-use tauri::{LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 use std::{thread, time::Duration};
+use tauri::{LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use crate::core::{app_state::AppState, reminder_lock};
+use crate::core::{
+    app_state::AppState, reminder_lock, reminder_scheduler::apply_next_trigger_mirror,
+};
 
 #[cfg(windows)]
 use crate::platform::win_enterprise;
@@ -46,7 +48,13 @@ fn virtual_desktop_union_phys(window: &WebviewWindow) -> Result<(i32, i32, u32, 
 }
 
 /// 中文注释：主显示器中心点的屏幕物理坐标；无主屏时返回联合矩形中心作为兜底。
-fn primary_monitor_center_phys(window: &WebviewWindow, union_left: i32, union_top: i32, union_w: u32, union_h: u32) -> (i32, i32) {
+fn primary_monitor_center_phys(
+    window: &WebviewWindow,
+    union_left: i32,
+    union_top: i32,
+    union_w: u32,
+    union_h: u32,
+) -> (i32, i32) {
     if let Ok(Some(primary)) = window.primary_monitor() {
         let p = primary.position();
         let s = primary.size();
@@ -163,28 +171,46 @@ fn start_focus_guard_if_needed(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppState>, active: bool) -> Result<(), String> {
+pub fn set_reminder_window_mode(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    active: bool,
+) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "未找到主窗口".to_string())?;
 
     if active {
         let (union_left, union_top, union_w, union_h) = virtual_desktop_union_phys(&window)?;
-        let (cx, cy) = primary_monitor_center_phys(&window, union_left, union_top, union_w, union_h);
-        let primary_center = Some((
-            (cx - union_left) as f64,
-            (cy - union_top) as f64,
-        ));
+        let (cx, cy) =
+            primary_monitor_center_phys(&window, union_left, union_top, union_w, union_h);
+        let primary_center = Some(((cx - union_left) as f64, (cy - union_top) as f64));
         let locked_rect = Some((union_left, union_top, union_w, union_h));
 
-        window.show().map_err(|error| format!("显示窗口失败: {error}"))?;
-        window.unminimize().map_err(|error| format!("恢复窗口失败: {error}"))?;
-        window.set_always_on_top(true).map_err(|error| format!("置顶失败: {error}"))?;
-        window.set_decorations(false).map_err(|error| format!("隐藏边框失败: {error}"))?;
-        window.set_resizable(false).map_err(|error| format!("禁用调整大小失败: {error}"))?;
-        window.set_maximizable(false).map_err(|error| format!("禁用最大化失败: {error}"))?;
-        window.set_minimizable(false).map_err(|error| format!("禁用最小化失败: {error}"))?;
-        window.set_closable(false).map_err(|error| format!("禁用关闭失败: {error}"))?;
+        window
+            .show()
+            .map_err(|error| format!("显示窗口失败: {error}"))?;
+        window
+            .unminimize()
+            .map_err(|error| format!("恢复窗口失败: {error}"))?;
+        window
+            .set_always_on_top(true)
+            .map_err(|error| format!("置顶失败: {error}"))?;
+        window
+            .set_decorations(false)
+            .map_err(|error| format!("隐藏边框失败: {error}"))?;
+        window
+            .set_resizable(false)
+            .map_err(|error| format!("禁用调整大小失败: {error}"))?;
+        window
+            .set_maximizable(false)
+            .map_err(|error| format!("禁用最大化失败: {error}"))?;
+        window
+            .set_minimizable(false)
+            .map_err(|error| format!("禁用最小化失败: {error}"))?;
+        window
+            .set_closable(false)
+            .map_err(|error| format!("禁用关闭失败: {error}"))?;
         window
             .set_fullscreen(false)
             .map_err(|error| format!("退出系统全屏失败: {error}"))?;
@@ -247,12 +273,24 @@ pub fn set_reminder_window_mode(app: tauri::AppHandle, state: tauri::State<AppSt
         window
             .set_fullscreen(false)
             .map_err(|error| format!("退出全屏失败: {error}"))?;
-        window.set_decorations(true).map_err(|error| format!("恢复边框失败: {error}"))?;
-        window.set_resizable(true).map_err(|error| format!("恢复可调整大小失败: {error}"))?;
-        window.set_maximizable(true).map_err(|error| format!("恢复最大化失败: {error}"))?;
-        window.set_minimizable(true).map_err(|error| format!("恢复最小化失败: {error}"))?;
-        window.set_closable(true).map_err(|error| format!("恢复关闭失败: {error}"))?;
-        window.set_always_on_top(false).map_err(|error| format!("取消置顶失败: {error}"))?;
+        window
+            .set_decorations(true)
+            .map_err(|error| format!("恢复边框失败: {error}"))?;
+        window
+            .set_resizable(true)
+            .map_err(|error| format!("恢复可调整大小失败: {error}"))?;
+        window
+            .set_maximizable(true)
+            .map_err(|error| format!("恢复最大化失败: {error}"))?;
+        window
+            .set_minimizable(true)
+            .map_err(|error| format!("恢复最小化失败: {error}"))?;
+        window
+            .set_closable(true)
+            .map_err(|error| format!("恢复关闭失败: {error}"))?;
+        window
+            .set_always_on_top(false)
+            .map_err(|error| format!("取消置顶失败: {error}"))?;
         window
             .set_size(LogicalSize::new(520.0, 700.0))
             .map_err(|error| format!("恢复窗口大小失败: {error}"))?;
@@ -284,13 +322,15 @@ pub fn update_next_trigger(
         .reminder_runtime
         .lock()
         .map_err(|_| "提醒运行态加锁失败".to_string())?;
-    runtime.next_trigger_at_ms = trigger_at_ms;
-    runtime.next_trigger_label = trigger_label;
+    apply_next_trigger_mirror(&mut runtime, trigger_at_ms, trigger_label);
     Ok(())
 }
 
 #[tauri::command]
-pub fn start_reminder_session(state: tauri::State<AppState>, session_id: String) -> Result<(), String> {
+pub fn start_reminder_session(
+    state: tauri::State<AppState>,
+    session_id: String,
+) -> Result<(), String> {
     let mut runtime = state
         .reminder_runtime
         .lock()

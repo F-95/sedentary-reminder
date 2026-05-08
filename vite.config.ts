@@ -1,4 +1,5 @@
-﻿import { defineConfig } from "vite";
+﻿/// <reference types="vitest/config" />
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"]
+  },
   clearScreen: false,
   server: { port: 1420, strictPort: true, host: "127.0.0.1" },
   envPrefix: ["VITE_", "TAURI_"],

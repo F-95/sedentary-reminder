@@ -23,6 +23,14 @@ export interface ReminderRule {
   intervalMinutes: number;
 }
 
+/** 中文注释：免打扰时段（左闭右开 [startMinutes, endMinutes)，同日 0–1439 分钟索引）。 */
+export interface QuietHourRange {
+  id: string;
+  enabled: boolean;
+  startMinutes: number;
+  endMinutes: number;
+}
+
 export interface ReminderConfig {
   enabled: boolean;
   rules: ReminderRule[];
@@ -34,6 +42,10 @@ export interface ReminderConfig {
   reminderDurationMinutes: number;
   randomTextEnabled: boolean;
   texts: string[];
+  /** 中文注释：免打扰总开关（第二版）；关闭时调度与第一版一致。 */
+  quietHoursEnabled: boolean;
+  /** 中文注释：免打扰时段列表（第二版）。 */
+  quietHours: QuietHourRange[];
 }
 
 export interface ReminderRuntime {

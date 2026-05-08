@@ -20,7 +20,7 @@ fn to_wide_null(s: &str) -> Vec<u16> {
 pub fn get_app_info() -> AppInfo {
     AppInfo {
         name: "sedentary-reminder".to_string(),
-        version: "0.1.0".to_string(),
+        version: "0.1.2".to_string(),
         app_id: "sedentary-reminder".to_string(),
     }
 }
@@ -30,12 +30,12 @@ pub fn get_app_info() -> AppInfo {
 pub fn set_auto_start(enabled: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
+        use windows::core::PCWSTR;
         use windows::Win32::Foundation::WIN32_ERROR;
         use windows::Win32::System::Registry::{
-            HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, RegCloseKey, RegDeleteValueW, RegOpenKeyExW,
-            RegSetValueExW, REG_SZ,
+            RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
+            KEY_SET_VALUE, REG_SZ,
         };
-        use windows::core::PCWSTR;
 
         const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
         const VALUE_NAME: &str = "sedentary-reminder";
@@ -44,8 +44,7 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
             format!("windows error={} ", e.0)
         }
 
-        let exe = std::env::current_exe()
-            .map_err(|e| format!("获取当前 exe 路径失败: {e}"))?;
+        let exe = std::env::current_exe().map_err(|e| format!("获取当前 exe 路径失败: {e}"))?;
         let exe_str = exe
             .to_str()
             .ok_or_else(|| "当前 exe 路径不是有效 UTF-8".to_string())?;
@@ -55,9 +54,8 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
         let exe_w = to_wide_null(exe_str);
 
         // UTF-16 WCHAR 数组转为 bytes（每个 u16 两字节）
-        let exe_bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(exe_w.as_ptr() as *const u8, exe_w.len() * 2)
-        };
+        let exe_bytes: &[u8] =
+            unsafe { std::slice::from_raw_parts(exe_w.as_ptr() as *const u8, exe_w.len() * 2) };
 
         let mut hkey = HKEY::default();
         let status_open = unsafe {
@@ -70,7 +68,10 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
             )
         };
         if status_open.0 != 0 {
-            return Err(format!("打开 Run 键失败: {}", win_err_to_string(status_open)));
+            return Err(format!(
+                "打开 Run 键失败: {}",
+                win_err_to_string(status_open)
+            ));
         }
 
         let result = if enabled {
@@ -96,7 +97,7 @@ pub fn set_auto_start(enabled: bool) -> Result<(), String> {
             // continue to handle below
         }
 
-        if result.0 != 0 && !( !enabled && result.0 == 2) {
+        if result.0 != 0 && !(!enabled && result.0 == 2) {
             return Err(format!(
                 "设置开机自启失败（enabled={}）: {}",
                 enabled,

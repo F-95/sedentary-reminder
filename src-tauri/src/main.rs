@@ -1,4 +1,4 @@
-﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
 mod core;
@@ -36,11 +36,12 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let mandatory = if let Ok(runtime) = window.state::<AppState>().reminder_runtime.lock() {
-                    runtime.mandatory_mode_active
-                } else {
-                    false
-                };
+                let mandatory =
+                    if let Ok(runtime) = window.state::<AppState>().reminder_runtime.lock() {
+                        runtime.mandatory_mode_active
+                    } else {
+                        false
+                    };
 
                 if mandatory {
                     api.prevent_close();

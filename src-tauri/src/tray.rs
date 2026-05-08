@@ -2,11 +2,11 @@
 
 use std::sync::Mutex;
 
+use crate::core::app_state::AppState;
 use serde::Serialize;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Emitter, Manager, Wry};
-use crate::core::app_state::AppState;
 
 /// 中文注释：前端监听的托盘字段切换事件名（与 `src/utils/tauri.ts` 常量一致）。
 pub const EVENT_TRAY_FIELD_TOGGLE: &str = "tray-field-toggle";
@@ -88,12 +88,7 @@ pub fn setup_tray(app: &App) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let menu = MenuBuilder::new(app)
-        .items(&[
-            &auto_start,
-            &reminder_enabled,
-            &lock_on_finish,
-            &quit,
-        ])
+        .items(&[&auto_start, &reminder_enabled, &lock_on_finish, &quit])
         .build()
         .map_err(|e| e.to_string())?;
 

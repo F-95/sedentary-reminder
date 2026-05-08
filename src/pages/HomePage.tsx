@@ -3,9 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { Button, Checkbox, Modal, Space, message } from "antd";
-import type { CloseBehaviorPreference, ReminderConfig, ReminderRule, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
+import type { CloseBehaviorPreference, ReminderConfig, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
 import ReminderFullscreenPage from "@/pages/ReminderFullscreenPage";
 import ReminderSettingsPage from "@/pages/ReminderSettingsPage";
+import QuietHoursSettingsPage from "@/pages/QuietHoursSettingsPage";
 import {
   CLOSE_BEHAVIOR_STORAGE_KEY,
   EVENT_MAIN_CLOSE_REQUESTED,
@@ -20,90 +21,17 @@ import {
   syncTrayMenu,
   updateNextTrigger
 } from "@/utils/tauri";
+import {
+  computeNextTriggerWithQuietHours,
+  loadReminderConfigFromStorageWithDiagnostics,
+  persistReminderConfigV2
+} from "@/utils/quietHours";
 
-const REMINDER_CONFIG_KEY = "reminder-config-v1";
 const LAST_MINUTE_NOTIFICATION_MS = 60_000;
 const DEFAULT_SOUND_URL = "https://cdn.pixabay.com/audio/2022/03/15/audio_ef8b7f0d9e.mp3";
 
-function clampReminderDurationMinutes(minutes: number): number {
-  return Math.min(10, Math.max(1, Math.round(minutes)));
-}
-
 function reminderDurationSeconds(config: ReminderConfig): number {
   return config.reminderDurationMinutes * 60;
-}
-
-function createDefaultRule(): ReminderRule {
-  return {
-    id: "default-rule",
-    enabled: true,
-    intervalMinutes: 60
-  };
-}
-
-function clampIntervalMinutes(minutes: number): number {
-  return Math.min(360, Math.max(1, Math.round(minutes)));
-}
-
-function normalizeRule(raw: unknown, index: number): ReminderRule {
-  if (!raw || typeof raw !== "object") {
-    return { ...createDefaultRule(), id: `rule-${index}` };
-  }
-  const o = raw as Record<string, unknown>;
-  const interval =
-    typeof o.intervalMinutes === "number" && Number.isFinite(o.intervalMinutes) ? o.intervalMinutes : 60;
-  return {
-    id: typeof o.id === "string" ? o.id : `rule-${index}`,
-    enabled: o.enabled !== false,
-    intervalMinutes: clampIntervalMinutes(interval)
-  };
-}
-
-/** 兼容旧版 localStorage（曾含 cycleType 等字段），统一迁移为仅间隔模式 */
-function migrateReminderConfig(raw: unknown): ReminderConfig {
-  const defaults = createDefaultConfig();
-  if (!raw || typeof raw !== "object") {
-    return defaults;
-  }
-  const o = raw as Record<string, unknown>;
-  const rulesRaw = o.rules;
-  const rules: ReminderRule[] = Array.isArray(rulesRaw) ? rulesRaw.map((r, i) => normalizeRule(r, i)) : defaults.rules;
-  const textsRaw = o.texts;
-  const migratedTexts = Array.isArray(textsRaw) ? textsRaw.filter((t): t is string => typeof t === "string") : defaults.texts;
-  // 中文注释：移除旧版本的固定文案（“久坐提醒：请立即起身活动2分钟。”），防止被覆盖展示。
-  const filteredTexts = migratedTexts.filter((t) => t !== "久坐提醒：请立即起身活动2分钟。");
-  return {
-    enabled: Boolean(o.enabled),
-    rules: rules.length ? rules : defaults.rules,
-    autoStartEnabled: typeof o.autoStartEnabled === "boolean" ? o.autoStartEnabled : defaults.autoStartEnabled,
-    lockOnReminderFinishEnabled:
-      typeof o.lockOnReminderFinishEnabled === "boolean" ? o.lockOnReminderFinishEnabled : defaults.lockOnReminderFinishEnabled,
-    reminderDurationMinutes:
-      typeof o.reminderDurationMinutes === "number"
-        ? clampReminderDurationMinutes(o.reminderDurationMinutes)
-        : defaults.reminderDurationMinutes,
-    randomTextEnabled: o.randomTextEnabled !== false,
-    texts: filteredTexts.length ? filteredTexts : defaults.texts
-  };
-}
-
-function createDefaultConfig(): ReminderConfig {
-  return {
-    enabled: false,
-    rules: [createDefaultRule()],
-    autoStartEnabled: false,
-    lockOnReminderFinishEnabled: true,
-    reminderDurationMinutes: 2,
-    randomTextEnabled: true,
-    texts: ["该起来活动了，请保护你的肩颈和眼睛。", "走动一下，喝口水，再回来继续高效工作。", "久坐提醒：请立即起身活动。"]
-  };
-}
-
-function getNextFromRule(rule: ReminderRule, nowMs: number): number | null {
-  if (!rule.enabled) {
-    return null;
-  }
-  return nowMs + rule.intervalMinutes * 60_000;
 }
 
 function pickRandomText(texts: string[]): string {
@@ -154,25 +82,28 @@ function readCloseBehaviorPreference(): CloseBehaviorPreference {
   return "ask";
 }
 
+/** 中文注释：首屏只读一次 localStorage，避免重复解析并与错误提示共用同一份诊断结果。 */
+function getInitialReminderLoad() {
+  const ref = { current: null as ReturnType<typeof loadReminderConfigFromStorageWithDiagnostics> | null };
+  return (): ReturnType<typeof loadReminderConfigFromStorageWithDiagnostics> => {
+    if (!ref.current) {
+      ref.current = loadReminderConfigFromStorageWithDiagnostics();
+    }
+    return ref.current;
+  };
+}
+
+const readInitialReminderLoad = getInitialReminderLoad();
+
 export default function HomePage(): JSX.Element {
   const [api, contextHolder] = message.useMessage();
   const apiRef = useRef(api);
   apiRef.current = api;
-  const [config, setConfig] = useState<ReminderConfig>(() => {
-    const raw = localStorage.getItem(REMINDER_CONFIG_KEY);
-    if (!raw) {
-      return createDefaultConfig();
-    }
-    try {
-      return migrateReminderConfig(JSON.parse(raw));
-    } catch {
-      return createDefaultConfig();
-    }
-  });
+  const [config, setConfig] = useState<ReminderConfig>(() => readInitialReminderLoad().config);
   const [nextTriggerAt, setNextTriggerAt] = useState<number | null>(null);
   const [reminderVisible, setReminderVisible] = useState<boolean>(false);
   const [isCounting, setIsCounting] = useState<boolean>(false);
-  const [remainSeconds, setRemainSeconds] = useState<number>(reminderDurationSeconds(createDefaultConfig()));
+  const [remainSeconds, setRemainSeconds] = useState<number>(() => reminderDurationSeconds(readInitialReminderLoad().config));
   const [currentText, setCurrentText] = useState<string>("");
   const [cardAnchor, setCardAnchor] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const sessionIdRef = useRef<string>("");
@@ -180,12 +111,30 @@ export default function HomePage(): JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const triggerInFlightRef = useRef<boolean>(false);
   const lastMinuteNotifiedForTriggerAtRef = useRef<number | null>(null);
+  const quietPostponeCapWarnedRef = useRef<boolean>(false);
+  const configLoadErrorShownRef = useRef<boolean>(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
+  const [settingsView, setSettingsView] = useState<"main" | "quiet">("main");
 
   useEffect(() => {
-    localStorage.setItem(REMINDER_CONFIG_KEY, JSON.stringify(config));
-  }, [config]);
+    if (configLoadErrorShownRef.current) {
+      return;
+    }
+    const { userMessage } = readInitialReminderLoad();
+    if (userMessage) {
+      configLoadErrorShownRef.current = true;
+      api.error(userMessage);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    try {
+      persistReminderConfigV2(config);
+    } catch (error) {
+      api.error(`配置保存失败：${String(error)}`);
+    }
+  }, [api, config]);
 
   // 中文注释：与系统托盘勾选状态对齐（配置仅存于前端 localStorage）。
   useEffect(() => {
@@ -255,8 +204,6 @@ export default function HomePage(): JSX.Element {
       unlistenTray?.();
       unlistenClose?.();
     };
-    // 中文注释：仅在挂载时注册全局监听；message 实例取首次闭包即可。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -292,20 +239,31 @@ export default function HomePage(): JSX.Element {
       timerRef.current = null;
     }
     if (!config.enabled || reminderVisible) {
+      quietPostponeCapWarnedRef.current = false;
       setNextTriggerAt(null);
       void updateNextTrigger(null, null);
       return;
     }
 
-    const candidateTimes = config.rules.map((rule) => getNextFromRule(rule, Date.now())).filter((item): item is number => !!item);
-    const next = candidateTimes.length ? Math.min(...candidateTimes) : null;
-    setNextTriggerAt(next);
-    void updateNextTrigger(next, next ? formatNextLabel(next) : null);
+    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(Date.now(), config);
+    if (hitQuietPostponeCap) {
+      if (!quietPostponeCapWarnedRef.current) {
+        api.warning(
+          "免打扰链式推迟次数达到安全上限，已使用最后一次计算结果；请检查时段是否重叠过多或配置异常。"
+        );
+        quietPostponeCapWarnedRef.current = true;
+      }
+    } else {
+      quietPostponeCapWarnedRef.current = false;
+    }
 
-    if (!next) {
+    setNextTriggerAt(nextMs);
+    void updateNextTrigger(nextMs, nextMs ? formatNextLabel(nextMs) : null);
+
+    if (!nextMs) {
       return;
     }
-    const waitMs = Math.max(500, next - Date.now());
+    const waitMs = Math.max(500, nextMs - Date.now());
     timerRef.current = window.setTimeout(() => {
       void triggerReminder();
     }, waitMs);
@@ -453,6 +411,8 @@ export default function HomePage(): JSX.Element {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
+    // 中文注释：不将 triggerReminder 列入依赖，避免定时器随渲染频繁重建；逻辑内通过 ref 与最新闭包调用。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上
   }, [api, config.enabled, nextTriggerAt, reminderVisible]);
 
   const applyCloseToTray = (): void => {
@@ -504,7 +464,20 @@ export default function HomePage(): JSX.Element {
         </Space>
       </Modal>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        <ReminderSettingsPage config={config} nextTriggerLabel={nextTriggerLabel} onChange={setConfig} />
+        {settingsView === "main" ? (
+          <ReminderSettingsPage
+            config={config}
+            nextTriggerLabel={nextTriggerLabel}
+            onChange={setConfig}
+            onOpenQuietHours={() => setSettingsView("quiet")}
+          />
+        ) : (
+          <QuietHoursSettingsPage
+            config={config}
+            onChange={setConfig}
+            onBack={() => setSettingsView("main")}
+          />
+        )}
       </Space>
       <ReminderFullscreenPage
         visible={reminderVisible}

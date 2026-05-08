@@ -1,7 +1,7 @@
 ﻿{
   "name": "sedentary-reminder",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write src/",
     "check": "tsc --noEmit",
+    "test": "vitest run",
     "pack:patch": "node scripts/pack-patch.mjs",
     "pack:plugin": "node scripts/pack-plugin.mjs",
     "version:bump": "node scripts/version.mjs"
@@ -28,12 +29,15 @@
     "@tauri-apps/cli": "2.0.0",
     "@types/react": "18.2.43",
     "@types/react-dom": "18.2.17",
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
     "@vitejs/plugin-react": "4.2.1",
     "eslint": "8.55.0",
     "eslint-plugin-react-hooks": "4.6.0",
     "eslint-plugin-react-refresh": "0.4.5",
     "prettier": "3.1.1",
     "typescript": "5.2.2",
-    "vite": "5.0.10"
+    "vite": "5.0.10",
+    "vitest": "1.6.0"
   }
 }

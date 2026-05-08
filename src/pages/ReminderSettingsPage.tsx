@@ -1,10 +1,13 @@
-import { Card, Col, Form, Input, InputNumber, Row, Space, Switch, Tag, Typography } from "antd";
+import { RightOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Form, Input, InputNumber, Row, Space, Switch, Tag, Typography } from "antd";
 import type { ReminderConfig, ReminderRule } from "@/types/global";
 
 interface ReminderSettingsPageProps {
   config: ReminderConfig;
   nextTriggerLabel: string;
   onChange: (nextConfig: ReminderConfig) => void;
+  /** 中文注释：传入时展示进入免打扰设置页的入口。 */
+  onOpenQuietHours?: () => void;
 }
 
 function createFallbackRule(): ReminderRule {
@@ -20,7 +23,7 @@ function updateRule(rule: ReminderRule, patch: Partial<ReminderRule>): ReminderR
 }
 
 export default function ReminderSettingsPage(props: ReminderSettingsPageProps): JSX.Element {
-  const { config, nextTriggerLabel, onChange } = props;
+  const { config, nextTriggerLabel, onChange, onOpenQuietHours } = props;
   const rule = config.rules[0] ?? createFallbackRule();
 
   const handleRuleChange = (patch: Partial<ReminderRule>): void => {
@@ -94,8 +97,8 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
             />
           </Form.Item>
 
-          <Form.Item label={<Typography.Text strong>提醒文案</Typography.Text>}>
-            <Space direction="vertical" style={{ width: "100%" }}>
+          <Form.Item label={<Typography.Text strong>提醒文案</Typography.Text>} style={{ marginBottom: 0 }}>
+            <Space direction="vertical" style={{ width: "100%" }} size="small">
               <Switch
                 checked={config.randomTextEnabled}
                 checkedChildren="开启随机"
@@ -119,6 +122,17 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
             </Space>
           </Form.Item>
         </Form>
+
+        {onOpenQuietHours ? (
+          <Button
+            type="link"
+            icon={<RightOutlined />}
+            onClick={onOpenQuietHours}
+            style={{ padding: 0, height: "auto", marginTop: 4 }}
+          >
+            免打扰时段设置
+          </Button>
+        ) : null}
       </Space>
     </Card>
   );
