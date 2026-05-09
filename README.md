@@ -61,8 +61,8 @@ npm run tauri build
 
 - **下载地址**：[Releases · F-95/sedentary-reminder](https://github.com/F-95/sedentary-reminder/releases)
 - **构建方式**：
-  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.3`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **已发布（Published）** 的 Release（**非草稿**），上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
-  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.3`），可在不重新打标签的情况下再次构建并上传资源。
+  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.4`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **已发布（Published）** 的 Release（**非草稿**），上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
+  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.4`），可在不重新打标签的情况下再次构建并上传资源。
 - **说明**：工作流必须使用 `tauri-apps/tauri-action` 的 **`@v0` 或 `@action-x.y.z` 标签**（例如 `@action-v0.6.2`）；该仓库不存在 `@v1`，若写成 `@v1` 会导致工作流无法正确加载 Action，Release 不会出现。
 - **权限要求**：若日志出现 **`Resource not accessible by integration`**（创建 Release 失败），请在仓库 **Settings → Actions → General → Workflow permissions** 中选择 **Read and write permissions** 并保存；否则 `GITHUB_TOKEN` 无法写入 Releases API。
 - **SmartScreen**：未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
@@ -70,7 +70,7 @@ npm run tauri build
 以下为可直接粘贴到 Release 说明中的模板（按需修改）：
 
 ```markdown
-## 久坐提醒 v0.1.3
+## 久坐提醒 v0.1.4
 
 ### 安装
 - 推荐一般用户：下载 `*-setup.exe`，按向导安装（当前用户目录，无需管理员）。
