@@ -23,7 +23,10 @@ export interface ReminderRule {
   intervalMinutes: number;
 }
 
-/** 中文注释：免打扰时段（左闭右开 [startMinutes, endMinutes)，同日 0–1439 分钟索引）。 */
+/**
+ * 中文注释：免打扰时段（左闭右开），0–1439 为本地日内分钟索引。
+ * startMinutes < endMinutes：同日；startMinutes > endMinutes：跨午夜（当日 start 至次日 end）。
+ */
 export interface QuietHourRange {
   id: string;
   enabled: boolean;

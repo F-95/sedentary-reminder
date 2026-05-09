@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ReminderConfig } from "@/types/global";
 import {
   computeNextTriggerWithQuietHours,
+  formatQuietHourRangeLabel,
   migrateV1ObjectToV2,
   parseReminderConfigV2,
   sanitizeQuietHourRange
@@ -112,6 +113,61 @@ describe("computeNextTriggerWithQuietHours", () => {
     const expected = new Date(2024, 4, 8, 13, 30, 0, 0).getTime();
     expect(nextMs).toBe(expected);
   });
+
+  it("跨午夜：晚间腿候选 → 次日结束整点 + 间隔", () => {
+    const interval = 45;
+    const cand = new Date(2024, 4, 7, 23, 0, 0, 0).getTime();
+    const nowMs = cand - interval * 60_000;
+    const config = baseConfig({
+      rules: [{ id: "r1", enabled: true, intervalMinutes: interval }],
+      quietHoursEnabled: true,
+      quietHours: [{ id: "q1", enabled: true, startMinutes: 22 * 60, endMinutes: 6 * 60 }]
+    });
+    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(nowMs, config);
+    expect(hitQuietPostponeCap).toBe(false);
+    const expected = new Date(2024, 4, 8, 6, 45, 0, 0).getTime();
+    expect(nextMs).toBe(expected);
+  });
+
+  it("跨午夜：清晨腿候选 → 当日结束整点 + 间隔", () => {
+    const interval = 45;
+    const cand = new Date(2024, 4, 8, 2, 0, 0, 0).getTime();
+    const nowMs = cand - interval * 60_000;
+    const config = baseConfig({
+      rules: [{ id: "r1", enabled: true, intervalMinutes: interval }],
+      quietHoursEnabled: true,
+      quietHours: [{ id: "q1", enabled: true, startMinutes: 22 * 60, endMinutes: 6 * 60 }]
+    });
+    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(nowMs, config);
+    expect(hitQuietPostponeCap).toBe(false);
+    const expected = new Date(2024, 4, 8, 6, 45, 0, 0).getTime();
+    expect(nextMs).toBe(expected);
+  });
+
+  it("跨午夜：06:00 整点不在禁区内（左闭右开）", () => {
+    const t0 = new Date(2024, 4, 8, 6, 0, 0, 0).getTime();
+    const nowMs = t0 - 45 * 60_000;
+    const config = baseConfig({
+      quietHoursEnabled: true,
+      quietHours: [{ id: "q1", enabled: true, startMinutes: 22 * 60, endMinutes: 6 * 60 }]
+    });
+    const { nextMs } = computeNextTriggerWithQuietHours(nowMs, config);
+    expect(nextMs).toBe(t0);
+  });
+});
+
+describe("formatQuietHourRangeLabel", () => {
+  it("整点时段格式化为 HH:mm-HH:mm", () => {
+    expect(formatQuietHourRangeLabel(12 * 60, 14 * 60)).toBe("12:00-14:00");
+  });
+
+  it("非整点补零", () => {
+    expect(formatQuietHourRangeLabel(9 * 60 + 5, 10 * 60 + 8)).toBe("09:05-10:08");
+  });
+
+  it("跨午夜摘要 22:00-06:00", () => {
+    expect(formatQuietHourRangeLabel(22 * 60, 6 * 60)).toBe("22:00-06:00");
+  });
 });
 
 describe("迁移与清洗", () => {
@@ -133,13 +189,25 @@ describe("迁移与清洗", () => {
     expect(c.quietHours).toHaveLength(1);
   });
 
-  it("sanitizeQuietHourRange：结束早于等于开始时抬升 end", () => {
+  it("sanitizeQuietHourRange：start>end 保留为跨午夜段", () => {
     const s = sanitizeQuietHourRange({
       id: "x",
       enabled: true,
       startMinutes: 100,
       endMinutes: 50
     });
-    expect(s.endMinutes).toBeGreaterThan(s.startMinutes);
+    expect(s.startMinutes).toBe(100);
+    expect(s.endMinutes).toBe(50);
+  });
+
+  it("sanitizeQuietHourRange：起止相等时修正为同日 1 分钟", () => {
+    const s = sanitizeQuietHourRange({
+      id: "x",
+      enabled: true,
+      startMinutes: 720,
+      endMinutes: 720
+    });
+    expect(s.startMinutes).toBe(720);
+    expect(s.endMinutes).toBe(721);
   });
 });

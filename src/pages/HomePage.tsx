@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -117,6 +117,10 @@ export default function HomePage(): JSX.Element {
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
   const [settingsView, setSettingsView] = useState<"main" | "quiet">("main");
 
+  /** 中文注释：供定时回调读取最新配置；收窄调度 effect 依赖后，避免仍用陈旧闭包中的 randomText / 时长等字段。 */
+  const configRef = useRef(config);
+  configRef.current = config;
+
   useEffect(() => {
     if (configLoadErrorShownRef.current) {
       return;
@@ -233,19 +237,69 @@ export default function HomePage(): JSX.Element {
 
   const nextTriggerLabel = useMemo(() => formatNextLabel(nextTriggerAt), [nextTriggerAt]);
 
+  const stopAudio = useCallback((): void => {
+    if (!audioRef.current) {
+      return;
+    }
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+  }, []);
+
+  const triggerReminder = useCallback(async (): Promise<void> => {
+    if (triggerInFlightRef.current || reminderVisible) {
+      return;
+    }
+    const cfg = configRef.current;
+    triggerInFlightRef.current = true;
+    sessionIdRef.current = `session-${Date.now()}`;
+    const selectedText = cfg.randomTextEnabled ? pickRandomText(cfg.texts) : cfg.texts[0] ?? "该活动了，请准备活动并做好准备。";
+    setCurrentText(selectedText);
+    setReminderVisible(true);
+    setIsCounting(false);
+    setRemainSeconds(reminderDurationSeconds(cfg));
+
+    try {
+      await setReminderWindowMode(true);
+      const runtime = await getReminderRuntime();
+      setCardAnchor({ x: runtime.primaryCenterX, y: runtime.primaryCenterY });
+    } catch (error) {
+      api.error(`提醒窗口切换失败：${String(error)}`);
+      setReminderVisible(false);
+      triggerInFlightRef.current = false;
+      return;
+    }
+
+    const audioSrc = DEFAULT_SOUND_URL;
+    try {
+      const audio = new Audio(audioSrc);
+      audio.loop = true;
+      audioRef.current = audio;
+      await audio.play();
+    } catch {
+      api.warning("铃声播放失败，请检查自定义铃声地址。");
+    }
+    triggerInFlightRef.current = false;
+  }, [api, reminderVisible]);
+
+  /**
+   * 中文注释：仅当「参与 computeNextTriggerWithQuietHours 的字段」或提醒显隐变化时重算下次触发。
+   * 开机自启、提醒结束锁屏、随机文案等不参与调度，变更时不得清空 setTimeout，否则会错误刷新「下次提醒时间」。
+   * 触发提醒时通过 configRef 读取最新配置（见 triggerReminder）。
+   */
   useEffect(() => {
+    const cfg = configRef.current;
     if (timerRef.current) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (!config.enabled || reminderVisible) {
+    if (!cfg.enabled || reminderVisible) {
       quietPostponeCapWarnedRef.current = false;
       setNextTriggerAt(null);
       void updateNextTrigger(null, null);
       return;
     }
 
-    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(Date.now(), config);
+    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(Date.now(), cfg);
     if (hitQuietPostponeCap) {
       if (!quietPostponeCapWarnedRef.current) {
         api.warning(
@@ -274,51 +328,7 @@ export default function HomePage(): JSX.Element {
         timerRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, reminderVisible]);
-
-  const stopAudio = (): void => {
-    if (!audioRef.current) {
-      return;
-    }
-    audioRef.current.pause();
-    audioRef.current.currentTime = 0;
-  };
-
-  const triggerReminder = async (): Promise<void> => {
-    if (triggerInFlightRef.current || reminderVisible) {
-      return;
-    }
-    triggerInFlightRef.current = true;
-    sessionIdRef.current = `session-${Date.now()}`;
-    const selectedText = config.randomTextEnabled ? pickRandomText(config.texts) : config.texts[0] ?? "该活动了，请准备活动并做好准备。";
-    setCurrentText(selectedText);
-    setReminderVisible(true);
-    setIsCounting(false);
-    setRemainSeconds(reminderDurationSeconds(config));
-
-    try {
-      await setReminderWindowMode(true);
-      const runtime = await getReminderRuntime();
-      setCardAnchor({ x: runtime.primaryCenterX, y: runtime.primaryCenterY });
-    } catch (error) {
-      api.error(`提醒窗口切换失败：${String(error)}`);
-      setReminderVisible(false);
-      triggerInFlightRef.current = false;
-      return;
-    }
-
-    const audioSrc = DEFAULT_SOUND_URL;
-    try {
-      const audio = new Audio(audioSrc);
-      audio.loop = true;
-      audioRef.current = audio;
-      await audio.play();
-    } catch {
-      api.warning("铃声播放失败，请检查自定义铃声地址。");
-    }
-    triggerInFlightRef.current = false;
-  };
+  }, [config.enabled, config.rules, config.quietHoursEnabled, config.quietHours, reminderVisible, api, triggerReminder]);
 
   const handleStartActivity = async (): Promise<void> => {
     if (!sessionIdRef.current) {

@@ -79,12 +79,22 @@ export function migrateV1ShapeToBaseConfig(raw: unknown): Omit<ReminderConfig, "
   };
 }
 
-/** 中文注释：将分钟索引约束在 0–1439，并保证 endMinutes > startMinutes（否则回退为相邻一分钟段）。 */
+/**
+ * 中文注释：将分钟索引约束在 0–1439。
+ * - startMinutes < endMinutes：同日左闭右开 [start, end)。
+ * - startMinutes > endMinutes：跨午夜，自当日 start 至次日 end（左闭右开）。
+ * - 相等时修正为同日最短 1 分钟段，避免零长度。
+ */
 export function sanitizeQuietHourRange(q: QuietHourRange): QuietHourRange {
-  const startMinutes = Math.min(1438, Math.max(0, Math.round(q.startMinutes)));
-  let endMinutes = Math.min(1439, Math.max(1, Math.round(q.endMinutes)));
-  if (endMinutes <= startMinutes) {
-    endMinutes = Math.min(1439, startMinutes + 1);
+  let startMinutes = Math.min(1439, Math.max(0, Math.round(q.startMinutes)));
+  let endMinutes = Math.min(1439, Math.max(0, Math.round(q.endMinutes)));
+  if (startMinutes === endMinutes) {
+    if (startMinutes < 1439) {
+      endMinutes = startMinutes + 1;
+    } else {
+      startMinutes = 1438;
+      endMinutes = 1439;
+    }
   }
   return { ...q, startMinutes, endMinutes };
 }
@@ -237,15 +247,31 @@ function minuteOfDayFromMs(ms: number): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-/** 中文注释：与基准时刻同一本地日的「第 minuteOfDay 分钟」对应的毫秒时间戳（从当日 00:00 起算）。 */
-function msAtMinuteOnLocalDay(baseMs: number, minuteOfDay: number): number {
-  const clamped = Math.min(1439, Math.max(0, minuteOfDay));
-  return startOfLocalDayMs(baseMs) + clamped * 60_000;
+const MS_PER_DAY = 24 * 60 * 60_000;
+
+/** 中文注释：候选时刻是否落在免打扰段内（左闭右开）；s<e 同日，s>e 跨午夜。 */
+function timestampHitsQuietRange(tMs: number, s: number, e: number): boolean {
+  const m = minuteOfDayFromMs(tMs);
+  if (s < e) {
+    return m >= s && m < e;
+  }
+  return m >= s || m < e;
 }
 
-/** 中文注释：左闭右开 [s, e) 判定；端点 e 不包含，避免相邻段双命中。 */
-function minuteHitsQuietRange(m: number, s: number, e: number): boolean {
-  return m >= s && m < e;
+/**
+ * 中文注释：tMs 须落在该段内；返回离开该段后的第一个整分时刻（>= tMs），再用于加间隔。
+ * 同日段：当日 end 分；跨午夜晚间腿：次日 end 分；跨午夜清晨腿：当日 end 分。
+ */
+function exitAfterQuietMs(tMs: number, s: number, e: number): number {
+  const dayStart = startOfLocalDayMs(tMs);
+  const m = minuteOfDayFromMs(tMs);
+  if (s < e) {
+    return dayStart + e * 60_000;
+  }
+  if (m >= s) {
+    return dayStart + MS_PER_DAY + e * 60_000;
+  }
+  return dayStart + e * 60_000;
 }
 
 export interface NextTriggerComputeResult {
@@ -255,8 +281,8 @@ export interface NextTriggerComputeResult {
 }
 
 /**
- * 中文注释：按《前端详细设计（React）-第二版》附录 B 计算下一次触发时刻（含免打扰链式推迟）。
- * 使用「胜出规则」的间隔分钟数作为每次移位后的加算间隔（与需求示例 I=45 一致）。
+ * 中文注释：计算下一次触发时刻（含免打扰链式推迟）；支持同日段与跨午夜段（start>end）。
+ * 使用胜出规则的间隔分钟数作为每次移位后的加算间隔（与需求示例 I=45 一致）。
  */
 export function computeNextTriggerWithQuietHours(nowMs: number, config: ReminderConfig): NextTriggerComputeResult {
   const enabledRules = config.rules.filter((r) => r.enabled);
@@ -281,20 +307,19 @@ export function computeNextTriggerWithQuietHours(nowMs: number, config: Reminder
     return { nextMs: bestT, hitQuietPostponeCap: false };
   }
 
-  const activeIntervals = config.quietHours.filter((q) => q.enabled && q.startMinutes < q.endMinutes);
+  const activeIntervals = config.quietHours.filter((q) => q.enabled && q.startMinutes !== q.endMinutes);
   if (!activeIntervals.length) {
     return { nextMs: bestT, hitQuietPostponeCap: false };
   }
 
   let t = bestT;
   for (let iter = 0; iter < MAX_QUIET_POSTPONE_ITERATIONS; iter++) {
-    const m = minuteOfDayFromMs(t);
-    const covering = activeIntervals.filter((q) => minuteHitsQuietRange(m, q.startMinutes, q.endMinutes));
+    const covering = activeIntervals.filter((q) => timestampHitsQuietRange(t, q.startMinutes, q.endMinutes));
     if (!covering.length) {
       return { nextMs: t, hitQuietPostponeCap: false };
     }
-    const eMax = Math.max(...covering.map((q) => q.endMinutes));
-    t = msAtMinuteOnLocalDay(t, eMax) + winningInterval * 60_000;
+    const boundary = Math.max(...covering.map((q) => exitAfterQuietMs(t, q.startMinutes, q.endMinutes)));
+    t = boundary + winningInterval * 60_000;
   }
 
   return { nextMs: t, hitQuietPostponeCap: true };
@@ -319,4 +344,12 @@ export function hourMinuteToMinutes(hour: number, minute: number): number {
   const h = Math.min(23, Math.max(0, Math.round(hour)));
   const m = Math.min(59, Math.max(0, Math.round(minute)));
   return Math.min(1439, h * 60 + m);
+}
+
+/** 中文注释：免打扰时段折叠标题用（24 小时制）；跨午夜时如 22:00-06:00（start>end）。 */
+export function formatQuietHourRangeLabel(startMinutes: number, endMinutes: number): string {
+  const s = minutesToHourMinute(startMinutes);
+  const e = minutesToHourMinute(endMinutes);
+  const pad = (n: number): string => n.toString().padStart(2, "0");
+  return `${pad(s.hour)}:${pad(s.minute)}-${pad(e.hour)}:${pad(e.minute)}`;
 }
