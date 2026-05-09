@@ -4,8 +4,12 @@
  *
  * 用法：node scripts/changelog-for-release.mjs <x.y.z> [输出文件路径]
  * 默认写入仓库根目录 release-body.md
+ *
+ * 在 GitHub Actions 中若存在环境变量 GITHUB_OUTPUT，会额外以随机分隔符写入多行输出
+ * `release_body`，避免 Windows 上 bash heredoc 与正文冲突导致的 delimiter 解析失败。
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,3 +57,11 @@ const outFile = outPathArg ? resolve(outPathArg) : resolve(repoRoot, "release-bo
 
 writeFileSync(outFile, out, "utf8");
 console.log(`[changelog-for-release] 已写入 ${outFile}（${out.length} 字符）`);
+
+const ghOutput = process.env.GITHUB_OUTPUT;
+if (ghOutput) {
+  const delim = `CHANGELOG_MULTILINE_${randomBytes(16).toString("hex")}`;
+  const block = `release_body<<${delim}\n${out}\n${delim}\n`;
+  appendFileSync(ghOutput, block, "utf8");
+  console.log(`[changelog-for-release] 已追加 release_body 至 GITHUB_OUTPUT（分隔符 ${delim}）`);
+}

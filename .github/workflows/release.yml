@@ -51,6 +51,7 @@ jobs:
         run: npm ci
 
       # 从 CHANGELOG.md 提取当前标签对应版本的小节；缺失则失败，避免无说明发布
+      # release_body 由 Node 直接写入 GITHUB_OUTPUT（随机分隔符），避免 Windows/bash heredoc 解析失败
       - name: 从 CHANGELOG 生成 Release 正文
         id: release_notes
         shell: bash
@@ -59,11 +60,6 @@ jobs:
           TAG_NAME="${{ github.event.inputs.tag_name || github.ref_name }}"
           VERSION="${TAG_NAME#v}"
           node scripts/changelog-for-release.mjs "$VERSION"
-          {
-            echo 'release_body<<RELEASE_BODY_EOF'
-            cat release-body.md
-            echo 'RELEASE_BODY_EOF'
-          } >> "$GITHUB_OUTPUT"
 
       - name: 构建并发布 Release
         uses: tauri-apps/tauri-action@action-v0.6.2
