@@ -72,3 +72,14 @@ export interface TrayFieldTogglePayload {
 
 /** 中文注释：主窗口关闭后的行为记忆：`ask` 每次询问，`tray` 最小化到托盘，`exit` 退出进程。 */
 export type CloseBehaviorPreference = "ask" | "tray" | "exit";
+
+/** 中文注释：主题偏好（第六版）：浅色 / 深色 / 跟随系统。 */
+export type ThemeModePreference = "light" | "dark" | "system";
+
+/** 中文注释：统计事件类型，与后端 `record_stat_event` 约定一致。 */
+export type StatEventKind = "sedentary_completed" | "sedentary_triggered" | "hydration_notified";
+
+export interface StatEventRecord {
+  kind: string;
+  atMs: number;
+}

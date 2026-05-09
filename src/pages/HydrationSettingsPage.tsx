@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Card, Col, InputNumber, Row, Space, Switch, Typography } from "antd";
+import { Card, Col, InputNumber, Row, Space, Switch, Typography } from "antd";
+import SubSettingsTopBar from "@/components/SubSettingsTopBar";
 import type { ReminderConfig } from "@/types/global";
 
 interface HydrationSettingsPageProps {
@@ -13,16 +13,10 @@ export default function HydrationSettingsPage(props: HydrationSettingsPageProps)
   const { config, onChange, onBack } = props;
 
   return (
-    <Card
-      title="补水提醒"
-      bordered
-      extra={
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>
-          返回主界面
-        </Button>
-      }
-    >
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <>
+      <SubSettingsTopBar title="补水提醒" onBack={onBack} />
+      <Card bordered>
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           仅通过系统通知（Notification）提醒喝水，不弹出全屏；启用免打扰且当前在免打扰时段内时不发送。
         </Typography.Paragraph>
@@ -50,7 +44,8 @@ export default function HydrationSettingsPage(props: HydrationSettingsPageProps)
             onChange={(value) => onChange({ ...config, hydrationIntervalMinutes: value ?? 60 })}
           />
         </div>
-      </Space>
-    </Card>
+        </Space>
+      </Card>
+    </>
   );
 }

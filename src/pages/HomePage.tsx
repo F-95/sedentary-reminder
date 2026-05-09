@@ -3,12 +3,19 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { Button, Checkbox, Modal, Space, message } from "antd";
-import type { CloseBehaviorPreference, ReminderConfig, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
+import type {
+  CloseBehaviorPreference,
+  ReminderConfig,
+  ThemeModePreference,
+  TrayFieldTogglePayload,
+  TrayToggleField
+} from "@/types/global";
 import ReminderFullscreenPage from "@/pages/ReminderFullscreenPage";
 import ReminderSettingsPage from "@/pages/ReminderSettingsPage";
 import SedentaryReminderSettingsPage from "@/pages/SedentaryReminderSettingsPage";
 import HydrationSettingsPage from "@/pages/HydrationSettingsPage";
 import QuietHoursSettingsPage from "@/pages/QuietHoursSettingsPage";
+import StatisticsPage from "@/pages/StatisticsPage";
 import {
   CLOSE_BEHAVIOR_STORAGE_KEY,
   EVENT_MAIN_CLOSE_REQUESTED,
@@ -17,6 +24,7 @@ import {
   finishActivityAndLock,
   getReminderRuntime,
   listDefaultSlogans,
+  recordStatEvent,
   setAutoStartEnabled,
   setReminderWindowMode,
   startReminderSession,
@@ -72,8 +80,8 @@ async function notifyOneMinuteBeforeReminder(): Promise<void> {
   }
 }
 
-/** 中文注释：第四版补水提醒，仅系统通知，不触发全屏。 */
-async function notifyHydrationReminder(): Promise<void> {
+/** 中文注释：第四版补水提醒，仅系统通知，不触发全屏。返回是否已成功发出通知（用于统计）。 */
+async function notifyHydrationReminder(): Promise<boolean> {
   try {
     let granted = await isPermissionGranted();
     if (!granted) {
@@ -81,14 +89,16 @@ async function notifyHydrationReminder(): Promise<void> {
       granted = permission === "granted";
     }
     if (!granted) {
-      return;
+      return false;
     }
     await sendNotification({
       title: "补水提醒",
       body: "该喝水了，记得补充水分。"
     });
+    return true;
   } catch {
     // 中文注释：非 Tauri 环境或通知插件不可用时静默跳过。
+    return false;
   }
 }
 
@@ -118,7 +128,13 @@ function getInitialReminderLoad() {
 
 const readInitialReminderLoad = getInitialReminderLoad();
 
-export default function HomePage(): JSX.Element {
+export interface HomePageProps {
+  themeMode: ThemeModePreference;
+  onThemeModeChange: (mode: ThemeModePreference) => void;
+}
+
+export default function HomePage(props: HomePageProps): JSX.Element {
+  const { themeMode, onThemeModeChange } = props;
   const [api, contextHolder] = message.useMessage();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -139,11 +155,17 @@ export default function HomePage(): JSX.Element {
   const configLoadErrorShownRef = useRef<boolean>(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [settingsView, setSettingsView] = useState<"main" | "sedentary" | "hydration" | "quiet">("main");
+  const [settingsView, setSettingsView] = useState<"main" | "sedentary" | "hydration" | "quiet" | "stats">("main");
+  /** 中文注释：递增以刷新枢纽统计简报。 */
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   /** 中文注释：补水下一拍时间，与 scheduleNext 内 targetMs 同步，供枢纽页展示。 */
   const [hydrationNextAt, setHydrationNextAt] = useState<number | null>(null);
   /** 中文注释：枢纽页倒计时用，仅在 main 视图每秒刷新。 */
   const [hubNowMs, setHubNowMs] = useState<number>(() => Date.now());
+
+  const bumpStatsRefresh = useCallback((): void => {
+    setStatsRefreshKey((k) => k + 1);
+  }, []);
 
   /** 中文注释：供定时回调读取最新配置；收窄调度 effect 依赖后，避免仍用陈旧闭包中的 randomText / 时长等字段。 */
   const configRef = useRef(config);
@@ -160,6 +182,12 @@ export default function HomePage(): JSX.Element {
     }, 1000);
     return () => window.clearInterval(id);
   }, [settingsView]);
+
+  useEffect(() => {
+    if (settingsView === "main") {
+      bumpStatsRefresh();
+    }
+  }, [settingsView, bumpStatsRefresh]);
 
   useEffect(() => {
     if (configLoadErrorShownRef.current) {
@@ -307,6 +335,8 @@ export default function HomePage(): JSX.Element {
       return;
     }
 
+    void recordStatEvent("sedentary_triggered");
+
     const audioSrc = DEFAULT_SOUND_URL;
     try {
       const audio = new Audio(audioSrc);
@@ -425,7 +455,11 @@ export default function HomePage(): JSX.Element {
             scheduleNext();
             return;
           }
-          await notifyHydrationReminder();
+          const sent = await notifyHydrationReminder();
+          if (sent) {
+            void recordStatEvent("hydration_notified");
+            bumpStatsRefresh();
+          }
           scheduleNext();
         })();
       }, waitMs);
@@ -437,7 +471,14 @@ export default function HomePage(): JSX.Element {
       cancelled = true;
       clearTimer();
     };
-  }, [api, config.hydrationReminderEnabled, config.hydrationIntervalMinutes, config.quietHoursEnabled, config.quietHours]);
+  }, [
+    api,
+    bumpStatsRefresh,
+    config.hydrationReminderEnabled,
+    config.hydrationIntervalMinutes,
+    config.quietHoursEnabled,
+    config.quietHours
+  ]);
 
   const handleStartActivity = async (): Promise<void> => {
     if (!sessionIdRef.current) {
@@ -476,6 +517,8 @@ export default function HomePage(): JSX.Element {
     const sessionId = sessionIdRef.current;
     void finishActivityAndLock(sessionId, config.lockOnReminderFinishEnabled)
       .then(() => {
+        void recordStatEvent("sedentary_completed");
+        bumpStatsRefresh();
         setReminderVisible(false);
         setIsCounting(false);
         setCurrentText("");
@@ -485,7 +528,7 @@ export default function HomePage(): JSX.Element {
       .catch((error) => {
         api.error(`结束活动失败：${String(error)}`);
       });
-  }, [api, isCounting, remainSeconds, config.lockOnReminderFinishEnabled]);
+  }, [api, bumpStatsRefresh, isCounting, remainSeconds, config.lockOnReminderFinishEnabled]);
 
   useEffect(() => {
     if (!config.enabled || reminderVisible || !nextTriggerAt) {
@@ -582,7 +625,15 @@ export default function HomePage(): JSX.Element {
           </Space>
         </Space>
       </Modal>
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space
+        direction="vertical"
+        size="middle"
+        style={{
+          width: "100%",
+          maxHeight: "calc(100vh - 48px)",
+          overflowY: settingsView === "main" ? "hidden" : "auto"
+        }}
+      >
         {settingsView === "main" ? (
           <ReminderSettingsPage
             config={config}
@@ -594,7 +645,13 @@ export default function HomePage(): JSX.Element {
             onOpenSedentary={() => setSettingsView("sedentary")}
             onOpenHydration={() => setSettingsView("hydration")}
             onOpenQuietHours={() => setSettingsView("quiet")}
+            themeMode={themeMode}
+            onThemeModeChange={onThemeModeChange}
+            statsRefreshKey={statsRefreshKey}
+            onOpenStats={() => setSettingsView("stats")}
           />
+        ) : settingsView === "stats" ? (
+          <StatisticsPage onBack={() => setSettingsView("main")} />
         ) : settingsView === "sedentary" ? (
           <SedentaryReminderSettingsPage
             config={config}

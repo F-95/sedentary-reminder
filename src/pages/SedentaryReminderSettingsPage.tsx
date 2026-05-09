@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Form, Input, InputNumber, Row, Space, Switch, Typography } from "antd";
+import { Card, Col, Form, Input, InputNumber, Row, Space, Switch, Typography } from "antd";
+import SubSettingsTopBar from "@/components/SubSettingsTopBar";
 import type { ReminderConfig, ReminderRule } from "@/types/global";
 
 interface SedentaryReminderSettingsPageProps {
@@ -33,16 +33,10 @@ export default function SedentaryReminderSettingsPage(props: SedentaryReminderSe
   };
 
   return (
-    <Card
-      title="久坐提醒"
-      bordered
-      extra={
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>
-          返回主界面
-        </Button>
-      }
-    >
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <>
+      <SubSettingsTopBar title="久坐提醒" onBack={onBack} />
+      <Card bordered>
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           到达间隔后弹出全屏提醒；开机启动请在主界面设置。进行中的提醒倒计时不会因进入免打扰而中断。
         </Typography.Paragraph>
@@ -114,7 +108,8 @@ export default function SedentaryReminderSettingsPage(props: SedentaryReminderSe
             </Space>
           </Form.Item>
         </Form>
-      </Space>
-    </Card>
+        </Space>
+      </Card>
+    </>
   );
 }

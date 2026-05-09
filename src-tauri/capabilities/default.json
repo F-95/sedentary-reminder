@@ -15,6 +15,7 @@
     "core:event:allow-listen",
     "core:event:allow-emit",
     "core:event:allow-emit-to",
-    "notification:default"
+    "notification:default",
+    "core:window:allow-set-theme"
   ]
 }

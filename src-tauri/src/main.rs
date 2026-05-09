@@ -33,6 +33,8 @@ pub fn run() {
             commands::reminder::finish_activity_and_lock,
             commands::reminder::get_reminder_runtime,
             commands::reminder::list_default_slogans,
+            commands::stats::record_stat_event,
+            commands::stats::query_stat_events,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

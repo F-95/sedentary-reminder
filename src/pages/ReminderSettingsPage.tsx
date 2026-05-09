@@ -1,6 +1,7 @@
 import { RightOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Switch, Typography } from "antd";
-import type { ReminderConfig } from "@/types/global";
+import { Button, Card, Col, Row, Segmented, Space, Switch, Typography } from "antd";
+import StatsBriefCard from "@/components/StatsBriefCard";
+import type { ReminderConfig, ThemeModePreference } from "@/types/global";
 
 interface ReminderSettingsPageProps {
   config: ReminderConfig;
@@ -16,6 +17,10 @@ interface ReminderSettingsPageProps {
   onOpenSedentary: () => void;
   onOpenHydration: () => void;
   onOpenQuietHours: () => void;
+  themeMode: ThemeModePreference;
+  onThemeModeChange: (mode: ThemeModePreference) => void;
+  statsRefreshKey: number;
+  onOpenStats: () => void;
 }
 
 function formatNextTimeLabel(timestamp: number | null): string {
@@ -70,7 +75,7 @@ function formatCountdown(remainMs: number): string {
   return `剩余 ${pad2(m)}:${pad2(s)}`;
 }
 
-/** 中文注释：主设置枢纽页——开机启动、双通道下次时间、子页入口（第五版）。 */
+/** 中文注释：主设置枢纽页——关怀标题下内嵌统计、双通道、主题与开机启动、子页入口。 */
 export default function ReminderSettingsPage(props: ReminderSettingsPageProps): JSX.Element {
   const {
     config,
@@ -81,7 +86,11 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
     onChange,
     onOpenSedentary,
     onOpenHydration,
-    onOpenQuietHours
+    onOpenQuietHours,
+    themeMode,
+    onThemeModeChange,
+    statsRefreshKey,
+    onOpenStats
   } = props;
 
   const sedentaryTimeLabel = sedentaryFullscreenActive
@@ -127,15 +136,8 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
         </Typography.Text>
       }
     >
-      <Space direction="vertical" size="large" style={{ width: "100%" }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Typography.Text strong>开机启动</Typography.Text>
-          </Col>
-          <Col>
-            <Switch checked={config.autoStartEnabled} onChange={(checked) => onChange({ ...config, autoStartEnabled: checked })} />
-          </Col>
-        </Row>
+      <Space direction="vertical" size="small" style={{ width: "100%" }}>
+        <StatsBriefCard refreshKey={statsRefreshKey} onOpenDetail={onOpenStats} variant="embedded" />
 
         <div>
           <Typography.Text strong>久坐提醒</Typography.Text>
@@ -160,6 +162,32 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
             <Typography.Text> {hydrationCountdownLabel}</Typography.Text>
           </div>
         </div>
+
+        <Row justify="space-between" align="middle">
+          <Col>
+            <Typography.Text strong>开机启动</Typography.Text>
+          </Col>
+          <Col>
+            <Switch checked={config.autoStartEnabled} onChange={(checked) => onChange({ ...config, autoStartEnabled: checked })} />
+          </Col>
+        </Row>
+
+        <Row justify="space-between" align="middle">
+          <Col>
+            <Typography.Text strong>主题模式</Typography.Text>
+          </Col>
+          <Col>
+            <Segmented
+              value={themeMode}
+              onChange={(v) => onThemeModeChange(v as ThemeModePreference)}
+              options={[
+                { label: "浅色", value: "light" },
+                { label: "深色", value: "dark" },
+                { label: "跟随系统", value: "system" }
+              ]}
+            />
+          </Col>
+        </Row>
 
         <Space direction="vertical" size="small" align="start" style={{ width: "100%" }}>
           <Button type="link" icon={<RightOutlined />} onClick={onOpenSedentary} style={{ padding: 0, height: "auto" }}>

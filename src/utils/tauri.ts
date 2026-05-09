@@ -1,5 +1,5 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
-import type { AppInfo, PatchMeta, PluginMeta, ReminderRuntime } from "@/types/global";
+import type { AppInfo, PatchMeta, PluginMeta, ReminderRuntime, StatEventRecord } from "@/types/global";
 
 /** 中文注释：托盘菜单切换字段事件名，须与 `src-tauri/src/tray.rs` 常量一致。 */
 export const EVENT_TRAY_FIELD_TOGGLE = "tray-field-toggle";
@@ -9,6 +9,9 @@ export const EVENT_MAIN_CLOSE_REQUESTED = "main-close-requested";
 
 /** 中文注释：关闭主窗口时「记住选择」的 localStorage 键。 */
 export const CLOSE_BEHAVIOR_STORAGE_KEY = "close-behavior-v1";
+
+/** 中文注释：主题模式持久化键（第六版）。 */
+export const THEME_MODE_STORAGE_KEY = "theme-mode-v1";
 
 export async function getAppInfo(): Promise<AppInfo> {
   return invoke<AppInfo>("get_app_info");
@@ -58,5 +61,23 @@ export async function syncTrayMenu(autoStart: boolean, reminderEnabled: boolean,
 /** 中文注释：退出整个应用进程。 */
 export async function exitApp(): Promise<void> {
   return invoke("exit_app");
+}
+
+/** 中文注释：追加一条本地统计事件（非 Tauri 环境可静默跳过）。 */
+export async function recordStatEvent(kind: string, atMs?: number): Promise<void> {
+  try {
+    await invoke("record_stat_event", { kind, atMs: atMs ?? null });
+  } catch {
+    // 中文注释：开发态浏览器或非 Tauri 时忽略。
+  }
+}
+
+/** 中文注释：按毫秒时间窗查询统计事件。 */
+export async function queryStatEvents(fromMs: number, toMs: number): Promise<StatEventRecord[]> {
+  try {
+    return await invoke<StatEventRecord[]>("query_stat_events", { fromMs, toMs });
+  } catch {
+    return [];
+  }
 }
 

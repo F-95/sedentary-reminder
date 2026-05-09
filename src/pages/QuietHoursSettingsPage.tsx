@@ -1,7 +1,7 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { App, Button, Card, Col, Collapse, InputNumber, Row, Space, Switch, Tag, Typography } from "antd";
+import SubSettingsTopBar from "@/components/SubSettingsTopBar";
 import type { QuietHourRange, ReminderConfig } from "@/types/global";
 import {
   MAX_QUIET_HOUR_RANGES,
@@ -63,16 +63,10 @@ export default function QuietHoursSettingsPage(props: QuietHoursSettingsPageProp
   };
 
   return (
-    <Card
-      title="免打扰设置"
-      bordered
-      extra={
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>
-          返回主界面
-        </Button>
-      }
-    >
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <>
+      <SubSettingsTopBar title="免打扰时段" onBack={onBack} />
+      <Card bordered>
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           支持跨午夜：若结束时刻早于开始时刻，表示从当日开始至次日结束（左闭右开）；否则为同日内时段。进行中的提醒倒计时不会因进入免打扰而中断。
         </Typography.Paragraph>
@@ -210,7 +204,8 @@ export default function QuietHoursSettingsPage(props: QuietHoursSettingsPageProp
         <Button type="dashed" onClick={addQuietHour} block>
           新增时段（最多 {MAX_QUIET_HOUR_RANGES} 段）
         </Button>
-      </Space>
-    </Card>
+        </Space>
+      </Card>
+    </>
   );
 }
