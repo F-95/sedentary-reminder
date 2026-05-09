@@ -1,141 +1,176 @@
 import { RightOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Form, Input, InputNumber, Row, Space, Switch, Tag, Typography } from "antd";
-import type { ReminderConfig, ReminderRule } from "@/types/global";
+import { Button, Card, Col, Row, Space, Switch, Typography } from "antd";
+import type { ReminderConfig } from "@/types/global";
 
 interface ReminderSettingsPageProps {
   config: ReminderConfig;
-  nextTriggerLabel: string;
+  /** 中文注释：久坐下次触发时间戳（毫秒），与 HomePage 调度一致；全屏进行中时父组件可能置空。 */
+  nextSedentaryAt: number | null;
+  /** 中文注释：补水下次通知时间戳；未启用时为 null。 */
+  nextHydrationAt: number | null;
+  /** 中文注释：用于倒计时，主界面每秒更新。 */
+  nowMs: number;
+  /** 中文注释：久坐全屏提醒是否展示中（此时 next 可能被清空，单独展示状态）。 */
+  sedentaryFullscreenActive: boolean;
   onChange: (nextConfig: ReminderConfig) => void;
-  /** 中文注释：传入时展示进入免打扰设置页的入口。 */
-  onOpenQuietHours?: () => void;
-  /** 中文注释：传入时展示进入补水提醒设置页的入口（排在免打扰链接之后）。 */
-  onOpenHydration?: () => void;
+  onOpenSedentary: () => void;
+  onOpenHydration: () => void;
+  onOpenQuietHours: () => void;
 }
 
-function createFallbackRule(): ReminderRule {
-  return {
-    id: "fallback-rule",
-    enabled: true,
-    intervalMinutes: 60
-  };
+function formatNextTimeLabel(timestamp: number | null): string {
+  if (!timestamp) {
+    return "未启用";
+  }
+  return new Date(timestamp).toLocaleString("zh-CN");
 }
 
-function updateRule(rule: ReminderRule, patch: Partial<ReminderRule>): ReminderRule {
-  return { ...rule, ...patch };
+/** 中文注释：按本地时段返回一句简短关怀文案（单行、无换行）。 */
+function warmLineForHour(hour: number): string {
+  if (hour >= 5 && hour < 8) {
+    return "清晨好，今天也请对自己温柔一点。";
+  }
+  if (hour >= 8 && hour < 11) {
+    return "上午加油，专注很酷，偶尔伸个懒腰也很酷。";
+  }
+  if (hour >= 11 && hour < 13) {
+    return "快到午间了，胃和眼睛都等你关照一下。";
+  }
+  if (hour >= 13 && hour < 15) {
+    return "午后容易倦，起身接杯水，你会更清醒。";
+  }
+  if (hour >= 15 && hour < 18) {
+    return "下午坚持得很棒，小动作也能救久坐。";
+  }
+  if (hour >= 18 && hour < 20) {
+    return "傍晚了，收个尾就给自己一点小奖励。";
+  }
+  if (hour >= 20 && hour < 23) {
+    return "夜晚模式：少盯屏一分钟，就多爱自己一分钟。";
+  }
+  if (hour >= 23 || hour < 1) {
+    return "夜深了，让眼睛和心情都慢慢松下来。";
+  }
+  return "凌晨还在线？记得留一点睡眠给明天的你。";
 }
 
+/** 中文注释：将剩余毫秒格式化为可读倒计时。 */
+function formatCountdown(remainMs: number): string {
+  if (remainMs <= 0) {
+    return "即将提醒";
+  }
+  const totalSec = Math.floor(remainMs / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad2 = (n: number): string => String(n).padStart(2, "0");
+  if (h > 0) {
+    return `剩余 ${h}小时${pad2(m)}分${pad2(s)}秒`;
+  }
+  return `剩余 ${pad2(m)}:${pad2(s)}`;
+}
+
+/** 中文注释：主设置枢纽页——开机启动、双通道下次时间、子页入口（第五版）。 */
 export default function ReminderSettingsPage(props: ReminderSettingsPageProps): JSX.Element {
-  const { config, nextTriggerLabel, onChange, onOpenQuietHours, onOpenHydration } = props;
-  const rule = config.rules[0] ?? createFallbackRule();
+  const {
+    config,
+    nextSedentaryAt,
+    nextHydrationAt,
+    nowMs,
+    sedentaryFullscreenActive,
+    onChange,
+    onOpenSedentary,
+    onOpenHydration,
+    onOpenQuietHours
+  } = props;
 
-  const handleRuleChange = (patch: Partial<ReminderRule>): void => {
-    onChange({
-      ...config,
-      rules: [updateRule(rule, patch)]
-    });
-  };
+  const sedentaryTimeLabel = sedentaryFullscreenActive
+    ? "全屏提醒进行中"
+    : !config.enabled
+      ? "未启用"
+      : formatNextTimeLabel(nextSedentaryAt);
+
+  const sedentaryRemainMs =
+    !config.enabled || sedentaryFullscreenActive || nextSedentaryAt === null ? null : nextSedentaryAt - nowMs;
+
+  const sedentaryCountdownLabel =
+    sedentaryFullscreenActive || !config.enabled
+      ? "—"
+      : nextSedentaryAt === null
+        ? "—"
+        : formatCountdown(sedentaryRemainMs ?? 0);
+
+  const hydrationEnabled = config.hydrationReminderEnabled;
+  const hydrationTimeLabel = !hydrationEnabled ? "未启用" : formatNextTimeLabel(nextHydrationAt);
+  const hydrationRemainMs =
+    !hydrationEnabled || nextHydrationAt === null ? null : nextHydrationAt - nowMs;
+  const hydrationCountdownLabel = !hydrationEnabled ? "—" : nextHydrationAt === null ? "—" : formatCountdown(hydrationRemainMs ?? 0);
+
+  const warmLine = warmLineForHour(new Date(nowMs).getHours());
 
   return (
     <Card
-      title={
-        <Tag
-          color="blue"
-          style={{ fontSize: 16, padding: "6px 12px", fontWeight: 600, borderRadius: 8 }}
-        >
-          下次提醒时间：{nextTriggerLabel}
-        </Tag>
-      }
       bordered
+      title={
+        <Typography.Text
+          style={{
+            display: "block",
+            maxWidth: "100%",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontSize: 15,
+            fontWeight: 500
+          }}
+        >
+          {warmLine}
+        </Typography.Text>
+      }
     >
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Row justify="space-between" align="middle">
           <Col>
-            <Typography.Text strong>开机自启</Typography.Text>
+            <Typography.Text strong>开机启动</Typography.Text>
           </Col>
           <Col>
             <Switch checked={config.autoStartEnabled} onChange={(checked) => onChange({ ...config, autoStartEnabled: checked })} />
           </Col>
         </Row>
 
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Typography.Text strong>启用提醒</Typography.Text>
-          </Col>
-          <Col>
-            <Switch checked={config.enabled} onChange={(checked) => onChange({ ...config, enabled: checked })} />
-          </Col>
-        </Row>
+        <div>
+          <Typography.Text strong>久坐提醒</Typography.Text>
+          <div style={{ marginTop: 8 }}>
+            <Typography.Text type="secondary">下次提醒时间：</Typography.Text>
+            <Typography.Text> {sedentaryTimeLabel}</Typography.Text>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <Typography.Text type="secondary">倒计时：</Typography.Text>
+            <Typography.Text> {sedentaryCountdownLabel}</Typography.Text>
+          </div>
+        </div>
 
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Typography.Text strong>提醒结束后锁屏</Typography.Text>
-          </Col>
-          <Col>
-            <Switch
-              checked={config.lockOnReminderFinishEnabled}
-              onChange={(checked) => onChange({ ...config, lockOnReminderFinishEnabled: checked })}
-            />
-          </Col>
-        </Row>
+        <div>
+          <Typography.Text strong>补水提醒</Typography.Text>
+          <div style={{ marginTop: 8 }}>
+            <Typography.Text type="secondary">下次提醒时间：</Typography.Text>
+            <Typography.Text> {hydrationTimeLabel}</Typography.Text>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <Typography.Text type="secondary">倒计时：</Typography.Text>
+            <Typography.Text> {hydrationCountdownLabel}</Typography.Text>
+          </div>
+        </div>
 
-        <Form layout="vertical">
-          <Form.Item label={<Typography.Text strong>提醒间隔（分钟，最低1）</Typography.Text>}>
-            <InputNumber
-              min={1}
-              max={360}
-              value={rule.intervalMinutes}
-              style={{ width: "100%", maxWidth: 320 }}
-              onChange={(value) => handleRuleChange({ intervalMinutes: value ?? 60 })}
-            />
-          </Form.Item>
-
-          <Form.Item label={<Typography.Text strong>活动倒计时（分钟，1-10）</Typography.Text>}>
-            <InputNumber
-              min={1}
-              max={10}
-              value={config.reminderDurationMinutes}
-              style={{ width: "100%", maxWidth: 320 }}
-              onChange={(value) => onChange({ ...config, reminderDurationMinutes: value ?? 2 })}
-            />
-          </Form.Item>
-
-          <Form.Item label={<Typography.Text strong>提醒文案</Typography.Text>} style={{ marginBottom: 0 }}>
-            <Space direction="vertical" style={{ width: "100%" }} size="small">
-              <Switch
-                checked={config.randomTextEnabled}
-                checkedChildren="开启随机"
-                unCheckedChildren="固定第一条"
-                onChange={(checked) => onChange({ ...config, randomTextEnabled: checked })}
-              />
-              <Input.TextArea
-                rows={4}
-                placeholder="每行一条文案"
-                value={config.texts.join("\n")}
-                onChange={(event) =>
-                  onChange({
-                    ...config,
-                    texts: event.target.value
-                      .split("\n")
-                      .map((item) => item.trim())
-                      .filter(Boolean)
-                  })
-                }
-              />
-            </Space>
-          </Form.Item>
-        </Form>
-
-        <Space wrap size="middle" style={{ width: "100%", marginTop: 4 }}>
-          {onOpenQuietHours ? (
-            <Button type="link" icon={<RightOutlined />} onClick={onOpenQuietHours} style={{ padding: 0, height: "auto" }}>
-              免打扰时段设置
-            </Button>
-          ) : null}
-          {onOpenHydration ? (
-            <Button type="link" icon={<RightOutlined />} onClick={onOpenHydration} style={{ padding: 0, height: "auto" }}>
-              补水提醒设置
-            </Button>
-          ) : null}
+        <Space direction="vertical" size="small" align="start" style={{ width: "100%" }}>
+          <Button type="link" icon={<RightOutlined />} onClick={onOpenSedentary} style={{ padding: 0, height: "auto" }}>
+            久坐提醒设置
+          </Button>
+          <Button type="link" icon={<RightOutlined />} onClick={onOpenHydration} style={{ padding: 0, height: "auto" }}>
+            补水提醒设置
+          </Button>
+          <Button type="link" icon={<RightOutlined />} onClick={onOpenQuietHours} style={{ padding: 0, height: "auto" }}>
+            免打扰时段设置
+          </Button>
         </Space>
       </Space>
     </Card>

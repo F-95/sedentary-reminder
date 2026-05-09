@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -6,6 +6,7 @@ import { Button, Checkbox, Modal, Space, message } from "antd";
 import type { CloseBehaviorPreference, ReminderConfig, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
 import ReminderFullscreenPage from "@/pages/ReminderFullscreenPage";
 import ReminderSettingsPage from "@/pages/ReminderSettingsPage";
+import SedentaryReminderSettingsPage from "@/pages/SedentaryReminderSettingsPage";
 import HydrationSettingsPage from "@/pages/HydrationSettingsPage";
 import QuietHoursSettingsPage from "@/pages/QuietHoursSettingsPage";
 import {
@@ -138,11 +139,27 @@ export default function HomePage(): JSX.Element {
   const configLoadErrorShownRef = useRef<boolean>(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [settingsView, setSettingsView] = useState<"main" | "quiet" | "hydration">("main");
+  const [settingsView, setSettingsView] = useState<"main" | "sedentary" | "hydration" | "quiet">("main");
+  /** 中文注释：补水下一拍时间，与 scheduleNext 内 targetMs 同步，供枢纽页展示。 */
+  const [hydrationNextAt, setHydrationNextAt] = useState<number | null>(null);
+  /** 中文注释：枢纽页倒计时用，仅在 main 视图每秒刷新。 */
+  const [hubNowMs, setHubNowMs] = useState<number>(() => Date.now());
 
   /** 中文注释：供定时回调读取最新配置；收窄调度 effect 依赖后，避免仍用陈旧闭包中的 randomText / 时长等字段。 */
   const configRef = useRef(config);
   configRef.current = config;
+
+  // 中文注释：主设置枢纽倒计时每秒刷新；离开 main 即停。
+  useEffect(() => {
+    if (settingsView !== "main") {
+      return;
+    }
+    setHubNowMs(Date.now());
+    const id = window.setInterval(() => {
+      setHubNowMs(Date.now());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [settingsView]);
 
   useEffect(() => {
     if (configLoadErrorShownRef.current) {
@@ -257,8 +274,6 @@ export default function HomePage(): JSX.Element {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const nextTriggerLabel = useMemo(() => formatNextLabel(nextTriggerAt), [nextTriggerAt]);
 
   const stopAudio = useCallback((): void => {
     if (!audioRef.current) {
@@ -376,6 +391,7 @@ export default function HomePage(): JSX.Element {
       const cfg = configRef.current;
       if (!cfg.hydrationReminderEnabled) {
         hydrationQuietPostponeCapWarnedRef.current = false;
+        setHydrationNextAt(null);
         return;
       }
 
@@ -397,6 +413,7 @@ export default function HomePage(): JSX.Element {
       }
 
       const targetMs = nextMs ?? Date.now() + cfg.hydrationIntervalMinutes * 60_000;
+      setHydrationNextAt(targetMs);
       const waitMs = Math.max(500, targetMs - Date.now());
       timerId = window.setTimeout(() => {
         if (cancelled) {
@@ -569,10 +586,20 @@ export default function HomePage(): JSX.Element {
         {settingsView === "main" ? (
           <ReminderSettingsPage
             config={config}
-            nextTriggerLabel={nextTriggerLabel}
+            nextSedentaryAt={nextTriggerAt}
+            nextHydrationAt={hydrationNextAt}
+            nowMs={hubNowMs}
+            sedentaryFullscreenActive={reminderVisible}
             onChange={setConfig}
-            onOpenQuietHours={() => setSettingsView("quiet")}
+            onOpenSedentary={() => setSettingsView("sedentary")}
             onOpenHydration={() => setSettingsView("hydration")}
+            onOpenQuietHours={() => setSettingsView("quiet")}
+          />
+        ) : settingsView === "sedentary" ? (
+          <SedentaryReminderSettingsPage
+            config={config}
+            onChange={setConfig}
+            onBack={() => setSettingsView("main")}
           />
         ) : settingsView === "quiet" ? (
           <QuietHoursSettingsPage
