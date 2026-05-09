@@ -13,6 +13,8 @@
 | 间隔提醒 | 可配置提醒间隔（分钟），到达时间后触发提醒流程 |
 | 全屏提醒页 | 沉浸式全屏界面，展示提醒文案与活动倒计时 |
 | 自定义文案 | 支持多条提醒语；可选随机展示；可从后端加载默认标语（Slogan） |
+| 免打扰时段 | 可总开关；支持多条时段（最多 20 条），每条可单独启用；支持**同日**与**跨午夜**（例如 22:00–次日 06:00，表现为开始分钟大于结束分钟）；与「下次提醒」计算联动，自动跳过时段内触发；链式推迟有安全上限，异常时会提示检查配置 |
+| 配置持久化 | 提醒与免打扰配置使用 **v2** 存储键；可自动从早期 **v1** 本地形状迁移，避免升级后丢数据 |
 | 系统通知 | 集成系统级通知（含临近触发等场景） |
 | 开机自启 | 与系统登录项联动（具体行为依赖操作系统） |
 | 活动结束后锁屏 | 可选在提醒流程结束后锁定屏幕（Windows 平台相关能力） |
@@ -59,15 +61,16 @@ npm run tauri build
 
 - **下载地址**：[Releases · F-95/sedentary-reminder](https://github.com/F-95/sedentary-reminder/releases)
 - **构建方式**：
-  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.0`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **草稿 Release（Draft）**，上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
-  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.0`），可在不重新打标签的情况下再次构建并上传资源。
+  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.3`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **已发布（Published）** 的 Release（**非草稿**），上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
+  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.3`），可在不重新打标签的情况下再次构建并上传资源。
 - **说明**：工作流必须使用 `tauri-apps/tauri-action` 的 **`@v0` 或 `@action-x.y.z` 标签**（例如 `@action-v0.6.2`）；该仓库不存在 `@v1`，若写成 `@v1` 会导致工作流无法正确加载 Action，Release 不会出现。
-- **正式发布**：在 GitHub 打开对应草稿 Release，补充说明后点击 **Publish release**。未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
+- **权限要求**：若日志出现 **`Resource not accessible by integration`**（创建 Release 失败），请在仓库 **Settings → Actions → General → Workflow permissions** 中选择 **Read and write permissions** 并保存；否则 `GITHUB_TOKEN` 无法写入 Releases API。
+- **SmartScreen**：未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
 
 以下为可直接粘贴到 Release 说明中的模板（按需修改）：
 
 ```markdown
-## 久坐提醒 v0.1.0
+## 久坐提醒 v0.1.3
 
 ### 安装
 - 推荐一般用户：下载 `*-setup.exe`，按向导安装（当前用户目录，无需管理员）。
@@ -85,12 +88,14 @@ npm run tauri build
 | `npm run dev` | 仅启动 Vite 前端开发服务 |
 | `npm run build` | 前端 `tsc` + Vite 生产构建 |
 | `npm run lint` / `npm run format` | 前端代码检查与格式化 |
+| `npm run test` | 前端单元测试（Vitest） |
 | `npm run pack:patch` / `npm run pack:plugin` | 补丁 / 插件打包辅助脚本 |
 
 ## 目录说明（节选）
 
 - `src/`：React 应用（页面、工具函数、`plugins/loader.tsx` 插件宿主等）
 - `src-tauri/`：Rust 与 Tauri 配置、命令与核心业务
+- `docs/久坐提醒/`：产品设计文档（含第三版等版本子目录）
 - `patches/`、`plugins/`：扩展包目录；**仅元数据与 schema 宜入库**，`backend/`、`frontend/` 下编译产物见 `.gitignore`
 - `public/`：不参与 Vite 打包的静态资源
 
