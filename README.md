@@ -60,26 +60,25 @@ npm run tauri build
 ## Windows 安装包（GitHub Releases）
 
 - **下载地址**：[Releases · F-95/sedentary-reminder](https://github.com/F-95/sedentary-reminder/releases)
+- **发布前必做（版本更新记录）**：
+  1. 在根目录 [`CHANGELOG.md`](CHANGELOG.md) 中把 `[Unreleased]` 的条目整理为新版 `## [x.y.z] - YYYY-MM-DD`，并保留 `[Unreleased]` 供后续累积；**必须与即将打的标签一致**，否则 [`release`](.github/workflows/release.yml) 工作流会因无法解析小节而失败。
+  2. 将 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 三处 `version` 对齐为同一 `x.y.z`（与迭代设计文档约定一致）。
+  3. 提交后创建并推送 Git 标签 `vx.y.z`，或用手动补跑工作流（见下）关联已有标签。
+- **Release 正文来源**：CI 会从 `CHANGELOG.md` 中对应 `## [x.y.z]` 小节自动生成 GitHub Release 描述，并附带安装包格式简要说明；无需再手工粘贴整段发布说明。
 - **构建方式**：
-  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.4`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **已发布（Published）** 的 Release（**非草稿**），上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
-  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.4`），可在不重新打标签的情况下再次构建并上传资源。
+  1. **推送标签**：向仓库推送 `v*` 标签（如 `v0.1.5`）后，由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 `windows-latest` 上执行 `npm run tauri build`，并创建或更新 **已发布（Published）** 的 Release（**非草稿**），上传 NSIS（`*-setup.exe`）与 MSI（`*.msi`）。
+  2. **手动补跑**：在仓库 **Actions → release → Run workflow** 中填写已存在的 `tag_name`（如 `v0.1.5`），可在不重新打标签的情况下再次构建并上传资源。
 - **说明**：工作流必须使用 `tauri-apps/tauri-action` 的 **`@v0` 或 `@action-x.y.z` 标签**（例如 `@action-v0.6.2`）；该仓库不存在 `@v1`，若写成 `@v1` 会导致工作流无法正确加载 Action，Release 不会出现。
 - **权限要求**：若日志出现 **`Resource not accessible by integration`**（创建 Release 失败），请在仓库 **Settings → Actions → General → Workflow permissions** 中选择 **Read and write permissions** 并保存；否则 `GITHUB_TOKEN` 无法写入 Releases API。
 - **SmartScreen**：未代码签名的安装包在 Windows 上可能出现 **SmartScreen（智能屏幕）** 提示，属正常现象；仅信任本仓库官方 Release 资产后再运行即可。
 
-以下为可直接粘贴到 Release 说明中的模板（按需修改）：
+**安装提示（与 Release 描述一致）**：
 
-```markdown
-## 久坐提醒 v0.1.4
-
-### 安装
 - 推荐一般用户：下载 `*-setup.exe`，按向导安装（当前用户目录，无需管理员）。
 - 企业/静默场景：可选用 `.msi`。
-
-### 说明
 - 首次运行若出现 SmartScreen，请选择「仍要运行」或按企业策略放行。
-- 功能与行为详见本仓库 README。
-```
+
+**补登已有 GitHub Release 说明**：在仓库根目录执行 `npm run export:release-notes`，会在 [`release-notes/`](release-notes/) 下生成与 `CHANGELOG.md` 一致的 `v0.1.x.md`（含 CI 同款页脚）。将对应文件全文粘贴到 GitHub **Releases → 编辑该版本**，或使用已安装的 [GitHub CLI](https://cli.github.com/)：`gh release edit v0.1.0 --notes-file release-notes/v0.1.0.md`（对每个标签各执行一次）。之后新标签由工作流自动写入正文，无需再手工补登。
 
 ## 常用脚本
 
@@ -90,11 +89,15 @@ npm run tauri build
 | `npm run lint` / `npm run format` | 前端代码检查与格式化 |
 | `npm run test` | 前端单元测试（Vitest） |
 | `npm run pack:patch` / `npm run pack:plugin` | 补丁 / 插件打包辅助脚本 |
+| `node scripts/changelog-for-release.mjs <x.y.z> [输出文件]` | 从 `CHANGELOG.md` 提取某版本正文（供本地核对或 `gh release edit --notes-file`） |
+| `npm run export:release-notes` | 批量生成 `release-notes/v*.md`，用于补登历史 Release |
 
 ## 目录说明（节选）
 
 - `src/`：React 应用（页面、工具函数、`plugins/loader.tsx` 插件宿主等）
 - `src-tauri/`：Rust 与 Tauri 配置、命令与核心业务
+- `CHANGELOG.md`：各版本更新摘要（发布与 CI Release 正文的唯一事实来源）
+- `release-notes/`：由 `npm run export:release-notes` 生成的历史版本说明片段，用于补登 GitHub Release（与 CI 正文一致）
 - `docs/久坐提醒/`：产品设计文档（含第三版等版本子目录）
 - `patches/`、`plugins/`：扩展包目录；**仅元数据与 schema 宜入库**，`backend/`、`frontend/` 下编译产物见 `.gitignore`
 - `public/`：不参与 Vite 打包的静态资源

@@ -21,6 +21,8 @@ plugins/**/frontend/
 # ========== 不应提交（编辑器 / 系统杂项）==========
 # Cursor IDE 本地规则与技能（Rules / Skills），属个人或本机配置
 .cursor/
+# Continue 扩展本地配置（与项目构建无关）
+.continue/
 .vscode/
 .DS_Store
 Thumbs.db
@@ -31,6 +33,9 @@ Desktop.ini
 .idea/
 *.suo
 *.user
+
+# CI / 本地由 scripts/changelog-for-release.mjs 生成的 Release 正文草稿
+release-body.md
 
 # 测试与工具缓存
 coverage/

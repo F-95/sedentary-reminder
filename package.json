@@ -14,7 +14,8 @@
     "test": "vitest run",
     "pack:patch": "node scripts/pack-patch.mjs",
     "pack:plugin": "node scripts/pack-plugin.mjs",
-    "version:bump": "node scripts/version.mjs"
+    "version:bump": "node scripts/version.mjs",
+    "export:release-notes": "node scripts/export-release-notes.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "5.2.6",

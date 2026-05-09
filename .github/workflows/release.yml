@@ -11,7 +11,7 @@ on:
       tag_name:
         description: "已存在的 Git 标签（例如 v0.1.0），用于检出代码并关联 Release"
         required: true
-        default: "v0.1.4"
+        default: "v0.1.5"
 
 # 需要创建 Release 并上传 Assets：须为 write（若仓库设为只读，下方声明无效，见文件末尾注释）
 permissions:
@@ -50,6 +50,21 @@ jobs:
       - name: 安装前端依赖（锁定版本）
         run: npm ci
 
+      # 从 CHANGELOG.md 提取当前标签对应版本的小节；缺失则失败，避免无说明发布
+      - name: 从 CHANGELOG 生成 Release 正文
+        id: release_notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ github.event.inputs.tag_name || github.ref_name }}"
+          VERSION="${TAG_NAME#v}"
+          node scripts/changelog-for-release.mjs "$VERSION"
+          {
+            echo 'release_body<<RELEASE_BODY_EOF'
+            cat release-body.md
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: 构建并发布 Release
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
@@ -57,7 +72,7 @@ jobs:
         with:
           tagName: ${{ github.event.inputs.tag_name || github.ref_name }}
           releaseName: "久坐提醒 v__VERSION__"
-          releaseBody: "Windows 安装包见下方 Assets。NSIS 为安装向导，MSI 为企业/静默部署常用格式。"
+          releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
           # action.yml 中参数名为 includeUpdaterJson（非 uploadUpdaterJson）
