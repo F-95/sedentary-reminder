@@ -1,5 +1,6 @@
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { App, Button, Card, Col, Collapse, InputNumber, Row, Space, Switch, Tag, Typography } from "antd";
 import type { QuietHourRange, ReminderConfig } from "@/types/global";
 import {
@@ -24,16 +25,28 @@ export default function QuietHoursSettingsPage(props: QuietHoursSettingsPageProp
   const { message } = App.useApp();
   const { config, onChange, onBack } = props;
 
+  /** 中文注释：受控折叠；默认全部折叠，新增时段时仅展开新段（第四版）。 */
+  const [activeKeys, setActiveKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    const ids = new Set(config.quietHours.map((q) => q.id));
+    setActiveKeys((prev) => prev.filter((id) => ids.has(id)));
+  }, [config.quietHours]);
+
   const patchQuietHourAt = (index: number, patch: Partial<QuietHourRange>): void => {
     const next = config.quietHours.map((q, i) => (i === index ? sanitizeQuietHourRange({ ...q, ...patch }) : q));
     onChange({ ...config, quietHours: next });
   };
 
   const removeQuietHourAt = (index: number): void => {
+    const removed = config.quietHours[index];
     onChange({
       ...config,
       quietHours: config.quietHours.filter((_, i) => i !== index)
     });
+    if (removed) {
+      setActiveKeys((prev) => prev.filter((k) => k !== removed.id));
+    }
   };
 
   const addQuietHour = (): void => {
@@ -41,10 +54,12 @@ export default function QuietHoursSettingsPage(props: QuietHoursSettingsPageProp
       message.warning(`免打扰时段已达到上限（${MAX_QUIET_HOUR_RANGES} 段），请先删除或合并后再新增。`);
       return;
     }
+    const created = createNewQuietHourRange();
     onChange({
       ...config,
-      quietHours: [...config.quietHours, createNewQuietHourRange()]
+      quietHours: [...config.quietHours, created]
     });
+    setActiveKeys([created.id]);
   };
 
   return (
@@ -78,7 +93,8 @@ export default function QuietHoursSettingsPage(props: QuietHoursSettingsPageProp
           <Collapse
             bordered={false}
             style={{ background: "transparent" }}
-            defaultActiveKey={config.quietHours.map((q) => q.id)}
+            activeKey={activeKeys}
+            onChange={(keys) => setActiveKeys(Array.isArray(keys) ? keys : [keys])}
             items={config.quietHours.map((q, index) => {
               const startHm = minutesToHourMinute(q.startMinutes);
               const endHm = minutesToHourMinute(q.endMinutes);

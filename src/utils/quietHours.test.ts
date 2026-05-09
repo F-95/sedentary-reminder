@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReminderConfig } from "@/types/global";
 import {
+  computeNextIntervalFireWithQuietHours,
   computeNextTriggerWithQuietHours,
   formatQuietHourRangeLabel,
   migrateV1ObjectToV2,
@@ -19,6 +20,8 @@ function baseConfig(partial: Partial<ReminderConfig> = {}): ReminderConfig {
     texts: ["a"],
     quietHoursEnabled: false,
     quietHours: [],
+    hydrationReminderEnabled: false,
+    hydrationIntervalMinutes: 60,
     ...partial
   };
 }
@@ -156,6 +159,43 @@ describe("computeNextTriggerWithQuietHours", () => {
   });
 });
 
+describe("computeNextIntervalFireWithQuietHours（第四版补水）", () => {
+  it("关闭免打扰时为 now + 间隔", () => {
+    const nowMs = Date.UTC(2024, 4, 8, 3, 24, 0, 0);
+    const config = baseConfig({ quietHoursEnabled: false });
+    const { nextMs, hitQuietPostponeCap } = computeNextIntervalFireWithQuietHours(nowMs, 10, config);
+    expect(hitQuietPostponeCap).toBe(false);
+    expect(nextMs).toBe(nowMs + 10 * 60_000);
+  });
+
+  it("候选落入同日免打扰段时推迟到边界 + 间隔", () => {
+    const interval = 10;
+    const t0 = new Date(2024, 4, 8, 12, 5, 0, 0).getTime();
+    const nowMs = t0 - interval * 60_000;
+    const config = baseConfig({
+      quietHoursEnabled: true,
+      quietHours: [{ id: "q1", enabled: true, startMinutes: 12 * 60, endMinutes: 14 * 60 }]
+    });
+    const { nextMs, hitQuietPostponeCap } = computeNextIntervalFireWithQuietHours(nowMs, interval, config);
+    expect(hitQuietPostponeCap).toBe(false);
+    const expected = new Date(2024, 4, 8, 14, 10, 0, 0).getTime();
+    expect(nextMs).toBe(expected);
+  });
+
+  it("跨午夜免打扰与久坐推迟语义一致（抽样）", () => {
+    const interval = 45;
+    const nowMs = new Date(2024, 4, 7, 23, 0, 0, 0).getTime() - interval * 60_000;
+    const config = baseConfig({
+      quietHoursEnabled: true,
+      quietHours: [{ id: "q1", enabled: true, startMinutes: 22 * 60, endMinutes: 6 * 60 }]
+    });
+    const { nextMs, hitQuietPostponeCap } = computeNextIntervalFireWithQuietHours(nowMs, interval, config);
+    expect(hitQuietPostponeCap).toBe(false);
+    const expected = new Date(2024, 4, 8, 6, 45, 0, 0).getTime();
+    expect(nextMs).toBe(expected);
+  });
+});
+
 describe("formatQuietHourRangeLabel", () => {
   it("整点时段格式化为 HH:mm-HH:mm", () => {
     expect(formatQuietHourRangeLabel(12 * 60, 14 * 60)).toBe("12:00-14:00");
@@ -176,6 +216,8 @@ describe("迁移与清洗", () => {
     expect(v2.quietHoursEnabled).toBe(false);
     expect(v2.quietHours).toEqual([]);
     expect(v2.rules[0]?.intervalMinutes).toBe(55);
+    expect(v2.hydrationReminderEnabled).toBe(false);
+    expect(v2.hydrationIntervalMinutes).toBe(60);
   });
 
   it("parseReminderConfigV2 读取布尔与列表", () => {
@@ -187,6 +229,19 @@ describe("迁移与清洗", () => {
     });
     expect(c.quietHoursEnabled).toBe(true);
     expect(c.quietHours).toHaveLength(1);
+    expect(c.hydrationReminderEnabled).toBe(false);
+    expect(c.hydrationIntervalMinutes).toBe(60);
+  });
+
+  it("parseReminderConfigV2 读取补水字段", () => {
+    const c = parseReminderConfigV2({
+      enabled: true,
+      rules: [{ id: "r", enabled: true, intervalMinutes: 30 }],
+      hydrationReminderEnabled: true,
+      hydrationIntervalMinutes: 15
+    });
+    expect(c.hydrationReminderEnabled).toBe(true);
+    expect(c.hydrationIntervalMinutes).toBe(15);
   });
 
   it("sanitizeQuietHourRange：start>end 保留为跨午夜段", () => {

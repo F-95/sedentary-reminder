@@ -49,6 +49,10 @@ export interface ReminderConfig {
   quietHoursEnabled: boolean;
   /** 中文注释：免打扰时段列表（第二版）。 */
   quietHours: QuietHourRange[];
+  /** 中文注释：补水提醒总开关（第四版）；仅系统通知，不触发全屏提醒。 */
+  hydrationReminderEnabled: boolean;
+  /** 中文注释：补水提醒间隔分钟（第四版），与久坐间隔同为 1–360。 */
+  hydrationIntervalMinutes: number;
 }
 
 export interface ReminderRuntime {

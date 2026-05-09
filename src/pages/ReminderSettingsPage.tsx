@@ -8,6 +8,8 @@ interface ReminderSettingsPageProps {
   onChange: (nextConfig: ReminderConfig) => void;
   /** 中文注释：传入时展示进入免打扰设置页的入口。 */
   onOpenQuietHours?: () => void;
+  /** 中文注释：传入时展示进入补水提醒设置页的入口（排在免打扰链接之后）。 */
+  onOpenHydration?: () => void;
 }
 
 function createFallbackRule(): ReminderRule {
@@ -23,7 +25,7 @@ function updateRule(rule: ReminderRule, patch: Partial<ReminderRule>): ReminderR
 }
 
 export default function ReminderSettingsPage(props: ReminderSettingsPageProps): JSX.Element {
-  const { config, nextTriggerLabel, onChange, onOpenQuietHours } = props;
+  const { config, nextTriggerLabel, onChange, onOpenQuietHours, onOpenHydration } = props;
   const rule = config.rules[0] ?? createFallbackRule();
 
   const handleRuleChange = (patch: Partial<ReminderRule>): void => {
@@ -123,16 +125,18 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
           </Form.Item>
         </Form>
 
-        {onOpenQuietHours ? (
-          <Button
-            type="link"
-            icon={<RightOutlined />}
-            onClick={onOpenQuietHours}
-            style={{ padding: 0, height: "auto", marginTop: 4 }}
-          >
-            免打扰时段设置
-          </Button>
-        ) : null}
+        <Space wrap size="middle" style={{ width: "100%", marginTop: 4 }}>
+          {onOpenQuietHours ? (
+            <Button type="link" icon={<RightOutlined />} onClick={onOpenQuietHours} style={{ padding: 0, height: "auto" }}>
+              免打扰时段设置
+            </Button>
+          ) : null}
+          {onOpenHydration ? (
+            <Button type="link" icon={<RightOutlined />} onClick={onOpenHydration} style={{ padding: 0, height: "auto" }}>
+              补水提醒设置
+            </Button>
+          ) : null}
+        </Space>
       </Space>
     </Card>
   );

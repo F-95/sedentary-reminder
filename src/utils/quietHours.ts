@@ -44,8 +44,10 @@ function normalizeRule(raw: unknown, index: number): ReminderRule {
   };
 }
 
-/** 中文注释：解析第一版形状的配置对象（不含免打扰字段）。 */
-export function migrateV1ShapeToBaseConfig(raw: unknown): Omit<ReminderConfig, "quietHoursEnabled" | "quietHours"> {
+/** 中文注释：解析第一版形状的配置对象（不含免打扰与第四版补水字段）。 */
+export function migrateV1ShapeToBaseConfig(
+  raw: unknown
+): Omit<ReminderConfig, "quietHoursEnabled" | "quietHours" | "hydrationReminderEnabled" | "hydrationIntervalMinutes"> {
   const defaults = {
     enabled: false,
     rules: [createDefaultRule()],
@@ -126,7 +128,9 @@ export function migrateV1ObjectToV2(v1: unknown): ReminderConfig {
   return {
     ...base,
     quietHoursEnabled: false,
-    quietHours: []
+    quietHours: [],
+    hydrationReminderEnabled: false,
+    hydrationIntervalMinutes: 60
   };
 }
 
@@ -137,7 +141,9 @@ export function parseReminderConfigV2(raw: unknown): ReminderConfig {
     return {
       ...base,
       quietHoursEnabled: false,
-      quietHours: []
+      quietHours: [],
+      hydrationReminderEnabled: false,
+      hydrationIntervalMinutes: 60
     };
   }
   const o = raw as Record<string, unknown>;
@@ -145,10 +151,16 @@ export function parseReminderConfigV2(raw: unknown): ReminderConfig {
   const quietHours: QuietHourRange[] = Array.isArray(qhRaw)
     ? qhRaw.map((item, i) => normalizeQuietHourRaw(item, i))
     : [];
+  const hydrationIntervalRaw =
+    typeof o.hydrationIntervalMinutes === "number" && Number.isFinite(o.hydrationIntervalMinutes)
+      ? o.hydrationIntervalMinutes
+      : 60;
   return {
     ...base,
     quietHoursEnabled: o.quietHoursEnabled === true,
-    quietHours: quietHours.slice(0, MAX_QUIET_HOUR_RANGES)
+    quietHours: quietHours.slice(0, MAX_QUIET_HOUR_RANGES),
+    hydrationReminderEnabled: o.hydrationReminderEnabled === true,
+    hydrationIntervalMinutes: clampIntervalMinutes(hydrationIntervalRaw)
   };
 }
 
@@ -281,6 +293,51 @@ export interface NextTriggerComputeResult {
 }
 
 /**
+ * 中文注释：将候选触发时刻沿时间轴推迟，直至落在免打扰外；每次离开禁区后加 stepIntervalMinutes。
+ * 久坐与补水调度共用，避免重复实现链式推迟。
+ */
+export function postponeCandidatePastQuietHours(
+  candidateMs: number,
+  stepIntervalMinutes: number,
+  config: ReminderConfig
+): NextTriggerComputeResult {
+  const step = clampIntervalMinutes(stepIntervalMinutes);
+  if (!config.quietHoursEnabled) {
+    return { nextMs: candidateMs, hitQuietPostponeCap: false };
+  }
+
+  const activeIntervals = config.quietHours.filter((q) => q.enabled && q.startMinutes !== q.endMinutes);
+  if (!activeIntervals.length) {
+    return { nextMs: candidateMs, hitQuietPostponeCap: false };
+  }
+
+  let t = candidateMs;
+  for (let iter = 0; iter < MAX_QUIET_POSTPONE_ITERATIONS; iter++) {
+    const covering = activeIntervals.filter((q) => timestampHitsQuietRange(t, q.startMinutes, q.endMinutes));
+    if (!covering.length) {
+      return { nextMs: t, hitQuietPostponeCap: false };
+    }
+    const boundary = Math.max(...covering.map((q) => exitAfterQuietMs(t, q.startMinutes, q.endMinutes)));
+    t = boundary + step * 60_000;
+  }
+
+  return { nextMs: t, hitQuietPostponeCap: true };
+}
+
+/**
+ * 中文注释：单间隔场景下，自 now 起算「now + interval」并经免打扰推迟（第四版补水提醒）。
+ */
+export function computeNextIntervalFireWithQuietHours(
+  nowMs: number,
+  intervalMinutes: number,
+  config: ReminderConfig
+): NextTriggerComputeResult {
+  const step = clampIntervalMinutes(intervalMinutes);
+  const candidate = nowMs + step * 60_000;
+  return postponeCandidatePastQuietHours(candidate, step, config);
+}
+
+/**
  * 中文注释：计算下一次触发时刻（含免打扰链式推迟）；支持同日段与跨午夜段（start>end）。
  * 使用胜出规则的间隔分钟数作为每次移位后的加算间隔（与需求示例 I=45 一致）。
  */
@@ -303,26 +360,7 @@ export function computeNextTriggerWithQuietHours(nowMs: number, config: Reminder
     return { nextMs: null, hitQuietPostponeCap: false };
   }
 
-  if (!config.quietHoursEnabled) {
-    return { nextMs: bestT, hitQuietPostponeCap: false };
-  }
-
-  const activeIntervals = config.quietHours.filter((q) => q.enabled && q.startMinutes !== q.endMinutes);
-  if (!activeIntervals.length) {
-    return { nextMs: bestT, hitQuietPostponeCap: false };
-  }
-
-  let t = bestT;
-  for (let iter = 0; iter < MAX_QUIET_POSTPONE_ITERATIONS; iter++) {
-    const covering = activeIntervals.filter((q) => timestampHitsQuietRange(t, q.startMinutes, q.endMinutes));
-    if (!covering.length) {
-      return { nextMs: t, hitQuietPostponeCap: false };
-    }
-    const boundary = Math.max(...covering.map((q) => exitAfterQuietMs(t, q.startMinutes, q.endMinutes)));
-    t = boundary + winningInterval * 60_000;
-  }
-
-  return { nextMs: t, hitQuietPostponeCap: true };
+  return postponeCandidatePastQuietHours(bestT, winningInterval, config);
 }
 
 export function createNewQuietHourRange(): QuietHourRange {

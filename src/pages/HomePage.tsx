@@ -6,6 +6,7 @@ import { Button, Checkbox, Modal, Space, message } from "antd";
 import type { CloseBehaviorPreference, ReminderConfig, TrayFieldTogglePayload, TrayToggleField } from "@/types/global";
 import ReminderFullscreenPage from "@/pages/ReminderFullscreenPage";
 import ReminderSettingsPage from "@/pages/ReminderSettingsPage";
+import HydrationSettingsPage from "@/pages/HydrationSettingsPage";
 import QuietHoursSettingsPage from "@/pages/QuietHoursSettingsPage";
 import {
   CLOSE_BEHAVIOR_STORAGE_KEY,
@@ -22,6 +23,7 @@ import {
   updateNextTrigger
 } from "@/utils/tauri";
 import {
+  computeNextIntervalFireWithQuietHours,
   computeNextTriggerWithQuietHours,
   loadReminderConfigFromStorageWithDiagnostics,
   persistReminderConfigV2
@@ -69,6 +71,26 @@ async function notifyOneMinuteBeforeReminder(): Promise<void> {
   }
 }
 
+/** 中文注释：第四版补水提醒，仅系统通知，不触发全屏。 */
+async function notifyHydrationReminder(): Promise<void> {
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const permission = await requestPermission();
+      granted = permission === "granted";
+    }
+    if (!granted) {
+      return;
+    }
+    await sendNotification({
+      title: "补水提醒",
+      body: "该喝水了，记得补充水分。"
+    });
+  } catch {
+    // 中文注释：非 Tauri 环境或通知插件不可用时静默跳过。
+  }
+}
+
 function isTrayToggleField(value: string): value is TrayToggleField {
   return value === "autoStart" || value === "enabled" || value === "lockOnFinish";
 }
@@ -112,10 +134,11 @@ export default function HomePage(): JSX.Element {
   const triggerInFlightRef = useRef<boolean>(false);
   const lastMinuteNotifiedForTriggerAtRef = useRef<number | null>(null);
   const quietPostponeCapWarnedRef = useRef<boolean>(false);
+  const hydrationQuietPostponeCapWarnedRef = useRef<boolean>(false);
   const configLoadErrorShownRef = useRef<boolean>(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [settingsView, setSettingsView] = useState<"main" | "quiet">("main");
+  const [settingsView, setSettingsView] = useState<"main" | "quiet" | "hydration">("main");
 
   /** 中文注释：供定时回调读取最新配置；收窄调度 effect 依赖后，避免仍用陈旧闭包中的 randomText / 时长等字段。 */
   const configRef = useRef(config);
@@ -330,6 +353,75 @@ export default function HomePage(): JSX.Element {
     };
   }, [config.enabled, config.rules, config.quietHoursEnabled, config.quietHours, reminderVisible, api, triggerReminder]);
 
+  /**
+   * 中文注释：补水独立调度链；依赖仅含补水开关、补水间隔与免打扰字段，不得并入久坐 next 的 effect。
+   * 每次触发后自「当前时刻」重算下一拍，语义与 computeNextIntervalFireWithQuietHours 一致。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    let timerId: number | null = null;
+
+    const clearTimer = (): void => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+    };
+
+    const scheduleNext = (): void => {
+      if (cancelled) {
+        return;
+      }
+      clearTimer();
+      const cfg = configRef.current;
+      if (!cfg.hydrationReminderEnabled) {
+        hydrationQuietPostponeCapWarnedRef.current = false;
+        return;
+      }
+
+      const { nextMs, hitQuietPostponeCap } = computeNextIntervalFireWithQuietHours(
+        Date.now(),
+        cfg.hydrationIntervalMinutes,
+        cfg
+      );
+
+      if (hitQuietPostponeCap) {
+        if (!hydrationQuietPostponeCapWarnedRef.current) {
+          hydrationQuietPostponeCapWarnedRef.current = true;
+          api.warning(
+            "免打扰链式推迟次数达到安全上限，已使用最后一次计算结果；请检查时段是否重叠过多或配置异常。"
+          );
+        }
+      } else {
+        hydrationQuietPostponeCapWarnedRef.current = false;
+      }
+
+      const targetMs = nextMs ?? Date.now() + cfg.hydrationIntervalMinutes * 60_000;
+      const waitMs = Math.max(500, targetMs - Date.now());
+      timerId = window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+        void (async () => {
+          const latest = configRef.current;
+          if (!latest.hydrationReminderEnabled) {
+            scheduleNext();
+            return;
+          }
+          await notifyHydrationReminder();
+          scheduleNext();
+        })();
+      }, waitMs);
+    };
+
+    scheduleNext();
+
+    return () => {
+      cancelled = true;
+      clearTimer();
+    };
+  }, [api, config.hydrationReminderEnabled, config.hydrationIntervalMinutes, config.quietHoursEnabled, config.quietHours]);
+
   const handleStartActivity = async (): Promise<void> => {
     if (!sessionIdRef.current) {
       return;
@@ -480,9 +572,16 @@ export default function HomePage(): JSX.Element {
             nextTriggerLabel={nextTriggerLabel}
             onChange={setConfig}
             onOpenQuietHours={() => setSettingsView("quiet")}
+            onOpenHydration={() => setSettingsView("hydration")}
+          />
+        ) : settingsView === "quiet" ? (
+          <QuietHoursSettingsPage
+            config={config}
+            onChange={setConfig}
+            onBack={() => setSettingsView("main")}
           />
         ) : (
-          <QuietHoursSettingsPage
+          <HydrationSettingsPage
             config={config}
             onChange={setConfig}
             onBack={() => setSettingsView("main")}
