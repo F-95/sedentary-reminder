@@ -80,7 +80,7 @@ export default function StatisticsPage(props: StatisticsPageProps): JSX.Element 
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Segmented options={DIM_OPTIONS} value={dimension} onChange={(v) => setDimension(v as StatsDimension)} />
           <Typography.Text type="secondary">
-            本维度合计：久坐完成 {totals.sed} 次 · 补水提醒 {totals.hyd} 次（本地统计，未上传）
+            本维度合计：久坐完成 {totals.sed} 次 · 补水提醒 {totals.hyd} 次（
           </Typography.Text>
           {chartFlat.length > 0 ? <Column {...columnConfig} /> : <Typography.Text type="secondary">暂无数据</Typography.Text>}
         </Space>
