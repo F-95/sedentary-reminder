@@ -30,7 +30,7 @@
 
 | 主界面 | 提醒页 |
 |--------|--------|
-| ![主界面](https://github.com/F-95/sedentary-reminder/tree/main/docs/screenshots/main-interface.png) | ![提醒界面](https://github.com/F-95/sedentary-reminder/tree/main/docs/screenshots/reminder-interface.png) |
+| ![主界面](https://raw.githubusercontent.com/F-95/sedentary-reminder/refs/heads/main/docs/screenshots/main-interface.png) | ![提醒界面](https://raw.githubusercontent.com/F-95/sedentary-reminder/refs/heads/main/docs/screenshots/reminder-interface.png) |
 
 ## 下载与安装（Windows）
 
