@@ -37,6 +37,9 @@ Desktop.ini
 # CI / 本地由 scripts/changelog-for-release.mjs 生成的 Release 正文草稿
 release-body.md
 
+# 全局文档目录（推广草稿、个人笔记等，仅本地留存，不入库）
+docs/global/
+
 # 测试与工具缓存
 coverage/
 .eslintcache
