@@ -16,6 +16,7 @@ import SedentaryReminderSettingsPage from "@/pages/SedentaryReminderSettingsPage
 import HydrationSettingsPage from "@/pages/HydrationSettingsPage";
 import QuietHoursSettingsPage from "@/pages/QuietHoursSettingsPage";
 import StatisticsPage from "@/pages/StatisticsPage";
+import AuthorBlurbPage from "@/pages/AuthorBlurbPage";
 import {
   CLOSE_BEHAVIOR_STORAGE_KEY,
   EVENT_MAIN_CLOSE_REQUESTED,
@@ -155,7 +156,9 @@ export default function HomePage(props: HomePageProps): JSX.Element {
   const configLoadErrorShownRef = useRef<boolean>(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [settingsView, setSettingsView] = useState<"main" | "sedentary" | "hydration" | "quiet" | "stats">("main");
+  const [settingsView, setSettingsView] = useState<"main" | "sedentary" | "hydration" | "quiet" | "stats" | "author">(
+    "main"
+  );
   /** 中文注释：递增以刷新枢纽统计简报。 */
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   /** 中文注释：补水下一拍时间，与 scheduleNext 内 targetMs 同步，供枢纽页展示。 */
@@ -649,9 +652,12 @@ export default function HomePage(props: HomePageProps): JSX.Element {
             onThemeModeChange={onThemeModeChange}
             statsRefreshKey={statsRefreshKey}
             onOpenStats={() => setSettingsView("stats")}
+            onOpenAuthorBlurb={() => setSettingsView("author")}
           />
         ) : settingsView === "stats" ? (
           <StatisticsPage onBack={() => setSettingsView("main")} />
+        ) : settingsView === "author" ? (
+          <AuthorBlurbPage onBack={() => setSettingsView("main")} />
         ) : settingsView === "sedentary" ? (
           <SedentaryReminderSettingsPage
             config={config}

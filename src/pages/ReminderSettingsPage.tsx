@@ -21,6 +21,7 @@ interface ReminderSettingsPageProps {
   onThemeModeChange: (mode: ThemeModePreference) => void;
   statsRefreshKey: number;
   onOpenStats: () => void;
+  onOpenAuthorBlurb: () => void;
 }
 
 function formatNextTimeLabel(timestamp: number | null): string {
@@ -90,7 +91,8 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
     themeMode,
     onThemeModeChange,
     statsRefreshKey,
-    onOpenStats
+    onOpenStats,
+    onOpenAuthorBlurb
   } = props;
 
   const sedentaryTimeLabel = sedentaryFullscreenActive
@@ -198,6 +200,9 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
           </Button>
           <Button type="link" icon={<RightOutlined />} onClick={onOpenQuietHours} style={{ padding: 0, height: "auto" }}>
             免打扰时段设置
+          </Button>
+          <Button type="link" icon={<RightOutlined />} onClick={onOpenAuthorBlurb} style={{ padding: 0, height: "auto" }}>
+            作者的哔哔赖赖
           </Button>
         </Space>
       </Space>
