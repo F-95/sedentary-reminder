@@ -165,6 +165,8 @@ export default function HomePage(props: HomePageProps): JSX.Element {
   const [hydrationNextAt, setHydrationNextAt] = useState<number | null>(null);
   /** 中文注释：枢纽页倒计时用，仅在 main 视图每秒刷新。 */
   const [hubNowMs, setHubNowMs] = useState<number>(() => Date.now());
+  /** 中文注释：第八版——用户「记录活动/跳过本次」后递增，迫使久坐调度 effect 以当前时刻重算下一拍。 */
+  const [sedentaryScheduleNonce, setSedentaryScheduleNonce] = useState(0);
 
   const bumpStatsRefresh = useCallback((): void => {
     setStatsRefreshKey((k) => k + 1);
@@ -399,7 +401,40 @@ export default function HomePage(props: HomePageProps): JSX.Element {
         timerRef.current = null;
       }
     };
-  }, [config.enabled, config.rules, config.quietHoursEnabled, config.quietHours, reminderVisible, api, triggerReminder]);
+  }, [
+    config.enabled,
+    config.rules,
+    config.quietHoursEnabled,
+    config.quietHours,
+    reminderVisible,
+    sedentaryScheduleNonce,
+    api,
+    triggerReminder
+  ]);
+
+  /** 中文注释：枢纽「记录活动」——记统计、刷新简报、从当前时刻重排久坐下一拍（不调起全屏）。 */
+  const handleSedentaryLogActivity = useCallback(async (): Promise<void> => {
+    try {
+      await recordStatEvent("sedentary_activity_logged");
+      bumpStatsRefresh();
+      setSedentaryScheduleNonce((n) => n + 1);
+      api.success("已记录活动，已为你安排下次久坐提醒。");
+    } catch (error) {
+      api.error(`记录失败：${String(error)}`);
+    }
+  }, [api, bumpStatsRefresh]);
+
+  /** 中文注释：枢纽「跳过本次」——记统计、刷新简报、从当前时刻重排下一拍。 */
+  const handleSedentarySkipOnce = useCallback(async (): Promise<void> => {
+    try {
+      await recordStatEvent("sedentary_skipped");
+      bumpStatsRefresh();
+      setSedentaryScheduleNonce((n) => n + 1);
+      api.success("已跳过本次，已为你安排下次久坐提醒。");
+    } catch (error) {
+      api.error(`跳过失败：${String(error)}`);
+    }
+  }, [api, bumpStatsRefresh]);
 
   /**
    * 中文注释：补水独立调度链；依赖仅含补水开关、补水间隔与免打扰字段，不得并入久坐 next 的 effect。
@@ -653,6 +688,12 @@ export default function HomePage(props: HomePageProps): JSX.Element {
             statsRefreshKey={statsRefreshKey}
             onOpenStats={() => setSettingsView("stats")}
             onOpenAuthorBlurb={() => setSettingsView("author")}
+            onSedentaryLogActivity={() => {
+              void handleSedentaryLogActivity();
+            }}
+            onSedentarySkipOnce={() => {
+              void handleSedentarySkipOnce();
+            }}
           />
         ) : settingsView === "stats" ? (
           <StatisticsPage onBack={() => setSettingsView("main")} />

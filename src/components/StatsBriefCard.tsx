@@ -4,9 +4,11 @@ import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { queryStatEvents } from "@/utils/tauri";
 import {
-  briefLast7DaysSedentaryCounts,
-  countSedentaryCompletedThisCalendarWeek,
-  countSedentaryCompletedToday
+  briefLast7DaysActivityStacks,
+  countActivityMergedThisCalendarWeek,
+  countActivityMergedToday,
+  countSkipsThisCalendarWeek,
+  countSkipsToday
 } from "@/utils/statsBuckets";
 
 const CHART_HEIGHT = 88;
@@ -24,9 +26,11 @@ export default function StatsBriefCard(props: StatsBriefCardProps): JSX.Element 
   const { refreshKey, onOpenDetail, variant = "embedded" } = props;
   const { token } = theme.useToken();
   const [loading, setLoading] = useState(true);
-  const [chartRows, setChartRows] = useState<{ day: string; count: number }[]>([]);
-  const [todayN, setTodayN] = useState(0);
-  const [weekN, setWeekN] = useState(0);
+  const [chartFlat, setChartFlat] = useState<{ label: string; type: string; value: number }[]>([]);
+  const [todayActivity, setTodayActivity] = useState(0);
+  const [todaySkip, setTodaySkip] = useState(0);
+  const [weekActivity, setWeekActivity] = useState(0);
+  const [weekSkip, setWeekSkip] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,10 +42,17 @@ export default function StatsBriefCard(props: StatsBriefCardProps): JSX.Element 
       if (cancelled) {
         return;
       }
-      const brief = briefLast7DaysSedentaryCounts(events, now);
-      setChartRows(brief.map((b) => ({ day: b.label, count: b.count })));
-      setTodayN(countSedentaryCompletedToday(events, now));
-      setWeekN(countSedentaryCompletedThisCalendarWeek(events, now));
+      const stacks = briefLast7DaysActivityStacks(events, now);
+      const flat: { label: string; type: string; value: number }[] = [];
+      for (const b of stacks) {
+        flat.push({ label: b.label, type: "活动次数", value: b.activityMerged });
+        flat.push({ label: b.label, type: "未活动次数", value: b.sedentarySkipped });
+      }
+      setChartFlat(flat);
+      setTodayActivity(countActivityMergedToday(events, now));
+      setTodaySkip(countSkipsToday(events, now));
+      setWeekActivity(countActivityMergedThisCalendarWeek(events, now));
+      setWeekSkip(countSkipsThisCalendarWeek(events, now));
       setLoading(false);
     })();
     return () => {
@@ -51,16 +62,24 @@ export default function StatsBriefCard(props: StatsBriefCardProps): JSX.Element 
 
   const columnConfig = useMemo(
     () => ({
-      data: chartRows,
-      xField: "day",
-      yField: "count",
+      data: chartFlat,
+      xField: "label",
+      yField: "value",
+      seriesField: "type",
+      isStack: true,
       height: CHART_HEIGHT,
       padding: [6, 6, 16, 6] as [number, number, number, number],
       axis: false as const,
+      legend: false as const,
+      colorField: "type",
       tooltip: { showMarkers: false },
-      style: { maxWidth: 12 }
+      scale: {
+        color: {
+          range: ["#1677ff", "#d46b08"]
+        }
+      }
     }),
-    [chartRows]
+    [chartFlat]
   );
 
   const onKeyDown = (e: KeyboardEvent): void => {
@@ -74,13 +93,13 @@ export default function StatsBriefCard(props: StatsBriefCardProps): JSX.Element 
     <>
       <Typography.Text strong>活动统计</Typography.Text>
       <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-        今日完成 {todayN} 次 · 本周 {weekN} 次
+        今日活动（完成+记录）{todayActivity} 次 · 今日跳过 {todaySkip} 次 · 本周活动 {weekActivity} 次 · 本周跳过 {weekSkip} 次
       </Typography.Text>
       <div style={{ height: CHART_HEIGHT, overflow: "hidden", marginTop: 6 }}>
-        {chartRows.length > 0 ? <Column {...columnConfig} /> : null}
+        {chartFlat.length > 0 ? <Column {...columnConfig} /> : null}
       </div>
       <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-        近 7 日久坐完成次数；点击查看详情
+        近 7 日活动次数与未活动（跳过）次数；点击查看详情
       </Typography.Text>
     </>
   );

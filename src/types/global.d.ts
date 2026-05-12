@@ -77,7 +77,12 @@ export type CloseBehaviorPreference = "ask" | "tray" | "exit";
 export type ThemeModePreference = "light" | "dark" | "system";
 
 /** 中文注释：统计事件类型，与后端 `record_stat_event` 约定一致。 */
-export type StatEventKind = "sedentary_completed" | "sedentary_triggered" | "hydration_notified";
+export type StatEventKind =
+  | "sedentary_completed"
+  | "sedentary_triggered"
+  | "sedentary_activity_logged"
+  | "sedentary_skipped"
+  | "hydration_notified";
 
 export interface StatEventRecord {
   kind: string;

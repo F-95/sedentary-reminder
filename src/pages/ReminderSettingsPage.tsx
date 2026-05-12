@@ -22,6 +22,10 @@ interface ReminderSettingsPageProps {
   statsRefreshKey: number;
   onOpenStats: () => void;
   onOpenAuthorBlurb: () => void;
+  /** 中文注释：第八版——枢纽「记录活动」，由 HomePage 写统计并重排久坐下一拍。 */
+  onSedentaryLogActivity: () => void;
+  /** 中文注释：第八版——枢纽「跳过本次」。 */
+  onSedentarySkipOnce: () => void;
 }
 
 function formatNextTimeLabel(timestamp: number | null): string {
@@ -92,7 +96,9 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
     onThemeModeChange,
     statsRefreshKey,
     onOpenStats,
-    onOpenAuthorBlurb
+    onOpenAuthorBlurb,
+    onSedentaryLogActivity,
+    onSedentarySkipOnce
   } = props;
 
   const sedentaryTimeLabel = sedentaryFullscreenActive
@@ -119,6 +125,10 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
 
   const warmLine = warmLineForHour(new Date(nowMs).getHours());
 
+  /** 中文注释：无下次时间、未启用或全屏进行中时不允许手动推进久坐周期。 */
+  const sedentaryManualActionsDisabled =
+    !config.enabled || sedentaryFullscreenActive || nextSedentaryAt === null;
+
   return (
     <Card
       bordered
@@ -141,17 +151,29 @@ export default function ReminderSettingsPage(props: ReminderSettingsPageProps): 
       <Space direction="vertical" size="small" style={{ width: "100%" }}>
         <StatsBriefCard refreshKey={statsRefreshKey} onOpenDetail={onOpenStats} variant="embedded" />
 
-        <div>
-          <Typography.Text strong>久坐提醒</Typography.Text>
-          <div style={{ marginTop: 8 }}>
-            <Typography.Text type="secondary">下次提醒时间：</Typography.Text>
-            <Typography.Text> {sedentaryTimeLabel}</Typography.Text>
-          </div>
-          <div style={{ marginTop: 4 }}>
-            <Typography.Text type="secondary">倒计时：</Typography.Text>
-            <Typography.Text> {sedentaryCountdownLabel}</Typography.Text>
-          </div>
-        </div>
+        <Row gutter={[12, 8]} align="top" wrap={false}>
+          <Col flex="1 1 auto" style={{ minWidth: 0 }}>
+            <Typography.Text strong>久坐提醒</Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              <Typography.Text type="secondary">下次提醒时间：</Typography.Text>
+              <Typography.Text> {sedentaryTimeLabel}</Typography.Text>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <Typography.Text type="secondary">倒计时：</Typography.Text>
+              <Typography.Text> {sedentaryCountdownLabel}</Typography.Text>
+            </div>
+          </Col>
+          <Col flex="none" style={{ paddingTop: 22 }}>
+            <Space direction="vertical" size={6} align="end">
+              <Button size="small" disabled={sedentaryManualActionsDisabled} onClick={onSedentaryLogActivity}>
+                记录活动
+              </Button>
+              <Button size="small" disabled={sedentaryManualActionsDisabled} onClick={onSedentarySkipOnce}>
+                跳过本次
+              </Button>
+            </Space>
+          </Col>
+        </Row>
 
         <div>
           <Typography.Text strong>补水提醒</Typography.Text>

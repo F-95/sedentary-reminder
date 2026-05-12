@@ -2,8 +2,14 @@ import { Column } from "@ant-design/plots";
 import { Card, Segmented, Space, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import SubSettingsTopBar from "@/components/SubSettingsTopBar";
-import type { StatsDimension } from "@/utils/statsBuckets";
-import { buildDetailBuckets, queryRangeForDimension } from "@/utils/statsBuckets";
+import type { StatsDimension, WindowTotals } from "@/utils/statsBuckets";
+import {
+  aggregateWindowTotals,
+  buildDetailBuckets,
+  peakActivityMergedBucketLabel,
+  queryRangeForDimension
+} from "@/utils/statsBuckets";
+import { buildEmotionalStatsBrief } from "@/utils/statsEmotionalBrief";
 import { queryStatEvents } from "@/utils/tauri";
 
 export interface StatisticsPageProps {
@@ -17,13 +23,22 @@ const DIM_OPTIONS: { label: string; value: StatsDimension }[] = [
   { label: "年", value: "year" }
 ];
 
-/** 中文注释：活动统计详情——按日/周/月/年维度展示久坐完成与补水通知次数。 */
+const EMPTY_TOTALS: WindowTotals = {
+  sedentaryTriggered: 0,
+  hydrationNotified: 0,
+  proactiveActivity: 0,
+  skips: 0,
+  activityMerged: 0
+};
+
+/** 中文注释：活动统计详情——按日/周/月/年展示活动合并与跳过堆叠图、四类合计与情绪简报。 */
 export default function StatisticsPage(props: StatisticsPageProps): JSX.Element {
   const { onBack } = props;
   const [dimension, setDimension] = useState<StatsDimension>("week");
   const [loading, setLoading] = useState(true);
   const [chartFlat, setChartFlat] = useState<{ label: string; type: string; value: number }[]>([]);
-  const [totals, setTotals] = useState({ sed: 0, hyd: 0 });
+  const [windowTotals, setWindowTotals] = useState<WindowTotals>(EMPTY_TOTALS);
+  const [briefText, setBriefText] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -37,16 +52,15 @@ export default function StatisticsPage(props: StatisticsPageProps): JSX.Element 
       }
       const buckets = buildDetailBuckets(events, dimension, now);
       const flat: { label: string; type: string; value: number }[] = [];
-      let sed = 0;
-      let hyd = 0;
       for (const b of buckets) {
-        flat.push({ label: b.label, type: "久坐完成", value: b.sedentaryCompleted });
-        flat.push({ label: b.label, type: "补水提醒", value: b.hydrationNotified });
-        sed += b.sedentaryCompleted;
-        hyd += b.hydrationNotified;
+        flat.push({ label: b.label, type: "活动次数", value: b.activityMerged });
+        flat.push({ label: b.label, type: "未活动次数", value: b.sedentarySkipped });
       }
+      const totals = aggregateWindowTotals(events);
+      const peakLabel = peakActivityMergedBucketLabel(buckets);
       setChartFlat(flat);
-      setTotals({ sed, hyd });
+      setWindowTotals(totals);
+      setBriefText(buildEmotionalStatsBrief(dimension, totals, peakLabel));
       setLoading(false);
     })();
     return () => {
@@ -66,12 +80,14 @@ export default function StatisticsPage(props: StatisticsPageProps): JSX.Element 
       colorField: "type",
       scale: {
         color: {
-          range: ["#1677ff", "#52c41a"]
+          range: ["#1677ff", "#d46b08"]
         }
       }
     }),
     [chartFlat]
   );
+
+  const { sedentaryTriggered, hydrationNotified, proactiveActivity, skips } = windowTotals;
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
@@ -80,9 +96,15 @@ export default function StatisticsPage(props: StatisticsPageProps): JSX.Element 
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Segmented options={DIM_OPTIONS} value={dimension} onChange={(v) => setDimension(v as StatsDimension)} />
           <Typography.Text type="secondary">
-            本维度合计：久坐完成 {totals.sed} 次 · 补水提醒 {totals.hyd} 次（
+            本维度合计：久坐提醒 {sedentaryTriggered} 次 · 补水提醒 {hydrationNotified} 次 · 主动活动 {proactiveActivity}{" "}
+            次 · 跳过久坐提醒 {skips} 次
           </Typography.Text>
           {chartFlat.length > 0 ? <Column {...columnConfig} /> : <Typography.Text type="secondary">暂无数据</Typography.Text>}
+          {briefText ? (
+            <Typography.Paragraph style={{ marginBottom: 0 }} type="secondary">
+              {briefText}
+            </Typography.Paragraph>
+          ) : null}
         </Space>
       </Card>
     </Space>
