@@ -2,7 +2,7 @@
 
 跨平台桌面应用：按间隔提醒起身活动，降低久坐健康风险。技术栈为 **Tauri 2**、**Rust**、**React**、**Vite**、**TypeScript**、**Ant Design**。
 
-**当前版本**：`0.1.7` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
+**当前版本**：`0.1.9` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
 
 ## 功能特性
 
@@ -87,7 +87,18 @@ npm run tauri build
 
 ## 发布与 CI（维护者）
 
-发版前：`CHANGELOG.md` 写入 `## [x.y.z]` 且与即将推送的标签一致；`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 三处 **version** 对齐。推送 `vx.y.z` 后由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 构建并发布 Windows 安装包。若创建 Release 失败，检查仓库 **Actions** 是否具备 **Read and write** 权限；工作流内 `tauri-action` 须使用官方文档推荐的标签（勿误用不存在的 `@v1`）。历史版本若需补登说明，可用 `npm run export:release-notes` 或 `gh release edit … --notes-file`。
+发版前：`CHANGELOG.md` 写入 `## [x.y.z]` 且与即将推送的标签一致；`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 三处 **version** 对齐。推送 `vx.y.z` 后由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 构建并发布 Windows 安装包。
+
+**Tauri 自动更新签名（必配）**：本仓库在 `tauri.conf.json` 中启用了 **`bundle.createUpdaterArtifacts`** 并配置了 **updater 公钥**，因此 **GitHub Actions 构建阶段必须能读取私钥**，否则会报错：`A public key has been found, but no private key`。请在 GitHub 仓库 **Settings → Secrets and variables → Actions** 中新建 **Repository secrets**：
+
+| Secret 名称 | 是否必填 | 说明 |
+|-------------|----------|------|
+| `TAURI_SIGNING_PRIVATE_KEY` | **必填** | minisign 私钥的**完整文件内容**（与 `tauri.conf.json` 里 `plugins.updater.pubkey` 成对；通常即本机 `src-tauri/keys/updater.key` 全文，勿提交该文件到 Git）。 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 可选 | 生成密钥时若设置了密码则填写，否则可省略。 |
+
+本地发版构建同样需在 shell 中导出上述环境变量（Tauri **不会**从 `.env` 读取签名变量）。详见 [Tauri 文档：Signing updates](https://v2.tauri.app/plugin/updater/#signing-updates)。
+
+若创建 Release 失败，检查仓库 **Actions** 是否具备 **Read and write** 权限；工作流内 `tauri-action` 须使用官方文档推荐的标签（勿误用不存在的 `@v1`）。历史版本若需补登说明，可用 `npm run export:release-notes` 或 `gh release edit … --notes-file`。
 
 ## AI 生成声明
 
