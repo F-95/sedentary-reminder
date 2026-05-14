@@ -12,6 +12,7 @@
 
 - 主界面 **底部** 常驻展示当前 **版本号（v 前缀 + semver）**，旁附 **刷新图标**：一键 **检查更新**；发现新版本时可确认后 **下载并安装** 并在安装完成后 **自动重启**（行为随 Tauri Updater）。
 - 检查更新失败时，对常见原因给出 **中文说明**（例如未发布 `latest.json`、地址不可达等）。
+- **热修复（同版本 v0.1.9 安装包重建）**：修复「无新版本」时检查更新报错（`Cannot read properties of null (reading 'available')`），方式为对齐前端 `@tauri-apps/plugin-updater` 与 Rust `tauri-plugin-updater` 版本；**请从 Release 重新下载安装包**，或通过自动更新拉取新构建的 `latest.json` 与安装包。
 
 ### 构建与发布
 
