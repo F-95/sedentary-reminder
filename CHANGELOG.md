@@ -6,6 +6,20 @@
 
 <!-- 下一版本发布前：将此处条目移至新版 ## [x.y.z]，并保留本段为空或继续累积 -->
 
+## [0.1.9] - 2026-05-14
+
+### 用户可见
+
+- 主界面 **底部** 常驻展示当前 **版本号（v 前缀 + semver）**，旁附 **刷新图标**：一键 **检查更新**；发现新版本时可确认后 **下载并安装** 并在安装完成后 **自动重启**（行为随 Tauri Updater）。
+- 检查更新失败时，对常见原因给出 **中文说明**（例如未发布 `latest.json`、地址不可达等）。
+
+### 构建与发布
+
+- **Windows**：安装包配置 **WebView2 引导**（`downloadBootstrapper`）；生产构建前端目标调整为 **chrome90**，以适配较旧 WebView2。
+- 集成 **Tauri Updater** 与 **process** 插件；`tauri.conf.json` 启用 **createUpdaterArtifacts**；默认更新地址指向 `F-95/sedentary-reminder` Releases 下的 **latest.json**（发版时需上传构建产物与签名）。
+- **`get_app_info`** 使用 **Cargo 包版本** 与 **bundle identifier** 一致输出；**`scripts/version.mjs`** 可一键同步 `package.json` / `Cargo.toml` / `tauri.conf.json` 版本号。
+- 与标签 **`v0.1.9`**、**`第九版`** 对应；第九版全套设计文档归档于 `docs/久坐提醒/第九版/`；仓库增加 **`.env.example`**（签名环境变量说明）与 **更新公钥** `src-tauri/keys/updater.key.pub`（私钥不入库）。
+
 ## [0.1.8] - 2026-05-12
 
 ### 用户可见
