@@ -102,6 +102,8 @@ npm run tauri build
 
 本地发版构建同样需在 shell 中导出上述环境变量（Tauri **不会**从 `.env` 读取签名变量）。详见 [Tauri 文档：Signing updates](https://v2.tauri.app/plugin/updater/#signing-updates)。
 
+- **`includeUpdaterJson: true`**：`tauri-action` 会向同一 Release 上传 **`latest.json`**，与 `tauri.conf.json` 中 `plugins.updater.endpoints` 使用的 `…/releases/latest/download/latest.json` 一致；**切勿**再手动改为 `false`，否则应用内「检查更新」会因缺少清单而失败。
+
 若创建 Release 失败，检查仓库 **Actions** 是否具备 **Read and write** 权限；工作流内 `tauri-action` 须使用官方文档推荐的标签（勿误用不存在的 `@v1`）。历史版本若需补登说明，可用 `npm run export:release-notes` 或 `gh release edit … --notes-file`。
 
 ## AI 生成声明

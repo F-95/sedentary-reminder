@@ -104,8 +104,10 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
-          # action.yml 中参数名为 includeUpdaterJson（非 uploadUpdaterJson）
-          includeUpdaterJson: false
+          # 中文注释：上传 latest.json，供应用内 updater 的 endpoints（…/releases/latest/download/latest.json）拉取。
+          includeUpdaterJson: true
+          # 中文注释：Windows 同时打 NSIS 与 MSI 时，更新清单优先指向 setup.exe（与多数用户安装方式一致）。
+          updaterJsonPreferNsis: true
           tauriScript: npm run tauri
 # 排查「Resource not accessible by integration / create-a-release」：
 # 1) GitHub 仓库 Settings → Actions → General → Workflow permissions
