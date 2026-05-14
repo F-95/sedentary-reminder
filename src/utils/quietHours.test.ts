@@ -22,6 +22,7 @@ function baseConfig(partial: Partial<ReminderConfig> = {}): ReminderConfig {
     quietHours: [],
     hydrationReminderEnabled: false,
     hydrationIntervalMinutes: 60,
+    logActivityOnSessionUnlockEnabled: false,
     ...partial
   };
 }

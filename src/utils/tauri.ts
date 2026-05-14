@@ -81,3 +81,29 @@ export async function queryStatEvents(fromMs: number, toMs: number): Promise<Sta
   }
 }
 
+/** 中文注释：第十版——与后端 `session_unlock` 模块 emit 名称一致。 */
+export const EVENT_SESSION_UNLOCKED = "session-unlocked";
+
+/** 中文注释：调度快照载荷（字段名与 Rust `SchedulerSnapshot` serde camelCase 对齐）。 */
+export interface SchedulerSnapshotPayload {
+  schemaVersion: number;
+  fingerprint: string;
+  sedentaryNextAtMs: number | null;
+  hydrationNextAtMs: number | null;
+}
+
+export async function loadSchedulerSnapshot(): Promise<SchedulerSnapshotPayload | null> {
+  try {
+    return await invoke<SchedulerSnapshotPayload | null>("load_scheduler_snapshot");
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSchedulerSnapshot(snapshot: SchedulerSnapshotPayload): Promise<void> {
+  try {
+    await invoke("save_scheduler_snapshot", { snapshot });
+  } catch {
+    // 中文注释：开发态浏览器或磁盘异常时静默，不打断主流程。
+  }
+}

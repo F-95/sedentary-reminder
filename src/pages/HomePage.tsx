@@ -1,9 +1,9 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ReloadOutlined } from "@ant-design/icons";
+import { ReloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { Button, Checkbox, Modal, Space, Typography, message, theme } from "antd";
+import { Button, Checkbox, Modal, Space, Tooltip, Typography, message, theme } from "antd";
 import type {
   CloseBehaviorPreference,
   ReminderConfig,
@@ -21,13 +21,16 @@ import AuthorBlurbPage from "@/pages/AuthorBlurbPage";
 import {
   CLOSE_BEHAVIOR_STORAGE_KEY,
   EVENT_MAIN_CLOSE_REQUESTED,
+  EVENT_SESSION_UNLOCKED,
   EVENT_TRAY_FIELD_TOGGLE,
   exitApp,
   finishActivityAndLock,
   getAppInfo,
   getReminderRuntime,
   listDefaultSlogans,
+  loadSchedulerSnapshot,
   recordStatEvent,
+  saveSchedulerSnapshot,
   setAutoStartEnabled,
   setReminderWindowMode,
   startReminderSession,
@@ -36,6 +39,7 @@ import {
 } from "@/utils/tauri";
 import { fetchAvailableUpdate, formatUpdaterCheckError, installUpdateAndRelaunch } from "@/utils/appUpdate";
 import {
+  buildSchedulerFingerprint,
   computeNextIntervalFireWithQuietHours,
   computeNextTriggerWithQuietHours,
   loadReminderConfigFromStorageWithDiagnostics,
@@ -43,6 +47,8 @@ import {
 } from "@/utils/quietHours";
 
 const LAST_MINUTE_NOTIFICATION_MS = 60_000;
+/** 中文注释：快照「下一拍」若距现在不足该毫秒数则丢弃，避免边界重复触发。 */
+const SCHEDULER_SNAPSHOT_SLACK_MS = 2000;
 const DEFAULT_SOUND_URL = "https://cdn.pixabay.com/audio/2022/03/15/audio_ef8b7f0d9e.mp3";
 
 function reminderDurationSeconds(config: ReminderConfig): number {
@@ -176,6 +182,16 @@ export default function HomePage(props: HomePageProps): JSX.Element {
   /** 中文注释：第九版——检查或安装更新进行中。 */
   const [updateBusy, setUpdateBusy] = useState(false);
 
+  const nextTriggerAtRef = useRef<number | null>(null);
+  const hydrationNextAtRef = useRef<number | null>(null);
+  const reminderVisibleRef = useRef<boolean>(false);
+  /** 中文注释：第十版——启动时自磁盘加载的调度快照，用于首帧合并久坐/补水下一拍。 */
+  const loadedSchedulerSnapshotRef = useRef<Awaited<ReturnType<typeof loadSchedulerSnapshot>>>(null);
+  /** 中文注释：仅首轮久坐调度 effect 尝试消费快照，之后一律按当前时刻重算。 */
+  const sedentaryScheduleBootstrapRef = useRef<boolean>(true);
+  /** 中文注释：仅首轮补水 scheduleNext 尝试消费快照。 */
+  const hydrationScheduleBootstrapRef = useRef<boolean>(true);
+
   const bumpStatsRefresh = useCallback((): void => {
     setStatsRefreshKey((k) => k + 1);
   }, []);
@@ -202,6 +218,27 @@ export default function HomePage(props: HomePageProps): JSX.Element {
       .then((info) => setAppVersion(info.version))
       .catch(() => setAppVersion("未知"));
   }, []);
+
+  /** 中文注释：第十版——加载调度快照供首轮久坐/补水合并。 */
+  useEffect(() => {
+    void loadSchedulerSnapshot().then((snap) => {
+      if (snap?.schemaVersion === 1) {
+        loadedSchedulerSnapshotRef.current = snap;
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    nextTriggerAtRef.current = nextTriggerAt;
+  }, [nextTriggerAt]);
+
+  useEffect(() => {
+    hydrationNextAtRef.current = hydrationNextAt;
+  }, [hydrationNextAt]);
+
+  useEffect(() => {
+    reminderVisibleRef.current = reminderVisible;
+  }, [reminderVisible]);
 
   useEffect(() => {
     if (settingsView === "main") {
@@ -240,6 +277,7 @@ export default function HomePage(props: HomePageProps): JSX.Element {
     let cancelled = false;
     let unlistenTray: (() => void) | undefined;
     let unlistenClose: (() => void) | undefined;
+    let unlistenSession: (() => void) | undefined;
 
     void (async () => {
       try {
@@ -285,6 +323,29 @@ export default function HomePage(props: HomePageProps): JSX.Element {
         if (cancelled) {
           unlistenTray();
           unlistenClose();
+          return;
+        }
+
+        unlistenSession = await listen(EVENT_SESSION_UNLOCKED, () => {
+          const c = configRef.current;
+          if (!c.logActivityOnSessionUnlockEnabled || !c.enabled || reminderVisibleRef.current) {
+            return;
+          }
+          void (async () => {
+            try {
+              await recordStatEvent("sedentary_activity_logged");
+              bumpStatsRefresh();
+              setSedentaryScheduleNonce((n) => n + 1);
+              apiRef.current.success("已记录活动（系统解锁），已为你安排下次久坐提醒。");
+            } catch (error: unknown) {
+              apiRef.current.error(`记录失败：${String(error)}`);
+            }
+          })();
+        });
+        if (cancelled) {
+          unlistenTray();
+          unlistenClose();
+          unlistenSession();
         }
       } catch {
         // 中文注释：非 Tauri 或权限不足时忽略。
@@ -295,8 +356,9 @@ export default function HomePage(props: HomePageProps): JSX.Element {
       cancelled = true;
       unlistenTray?.();
       unlistenClose?.();
+      unlistenSession?.();
     };
-  }, []);
+  }, [bumpStatsRefresh]);
 
   useEffect(() => {
     void setAutoStartEnabled(config.autoStartEnabled).catch((error) => {
@@ -384,10 +446,34 @@ export default function HomePage(props: HomePageProps): JSX.Element {
       quietPostponeCapWarnedRef.current = false;
       setNextTriggerAt(null);
       void updateNextTrigger(null, null);
+      void saveSchedulerSnapshot({
+        schemaVersion: 1,
+        fingerprint: buildSchedulerFingerprint(cfg),
+        sedentaryNextAtMs: null,
+        hydrationNextAtMs: hydrationNextAtRef.current
+      });
       return;
     }
 
-    const { nextMs, hitQuietPostponeCap } = computeNextTriggerWithQuietHours(Date.now(), cfg);
+    const fp = buildSchedulerFingerprint(cfg);
+    const computed = computeNextTriggerWithQuietHours(Date.now(), cfg);
+    let { nextMs } = computed;
+    const { hitQuietPostponeCap } = computed;
+    const snap = loadedSchedulerSnapshotRef.current;
+    const now = Date.now();
+    if (
+      nextMs !== null &&
+      sedentaryScheduleBootstrapRef.current &&
+      snap &&
+      snap.schemaVersion === 1 &&
+      snap.fingerprint === fp &&
+      snap.sedentaryNextAtMs !== null &&
+      snap.sedentaryNextAtMs > now + SCHEDULER_SNAPSHOT_SLACK_MS
+    ) {
+      nextMs = snap.sedentaryNextAtMs;
+    }
+    sedentaryScheduleBootstrapRef.current = false;
+
     if (hitQuietPostponeCap) {
       if (!quietPostponeCapWarnedRef.current) {
         api.warning(
@@ -401,6 +487,13 @@ export default function HomePage(props: HomePageProps): JSX.Element {
 
     setNextTriggerAt(nextMs);
     void updateNextTrigger(nextMs, nextMs ? formatNextLabel(nextMs) : null);
+
+    void saveSchedulerSnapshot({
+      schemaVersion: 1,
+      fingerprint: fp,
+      sedentaryNextAtMs: nextMs,
+      hydrationNextAtMs: hydrationNextAtRef.current
+    });
 
     if (!nextMs) {
       return;
@@ -474,15 +567,39 @@ export default function HomePage(props: HomePageProps): JSX.Element {
       const cfg = configRef.current;
       if (!cfg.hydrationReminderEnabled) {
         hydrationQuietPostponeCapWarnedRef.current = false;
+        hydrationScheduleBootstrapRef.current = false;
         setHydrationNextAt(null);
+        void saveSchedulerSnapshot({
+          schemaVersion: 1,
+          fingerprint: buildSchedulerFingerprint(cfg),
+          sedentaryNextAtMs: nextTriggerAtRef.current,
+          hydrationNextAtMs: null
+        });
         return;
       }
 
-      const { nextMs, hitQuietPostponeCap } = computeNextIntervalFireWithQuietHours(
+      const fp = buildSchedulerFingerprint(cfg);
+      const computed = computeNextIntervalFireWithQuietHours(
         Date.now(),
         cfg.hydrationIntervalMinutes,
         cfg
       );
+      let { nextMs } = computed;
+      const { hitQuietPostponeCap } = computed;
+
+      const snap = loadedSchedulerSnapshotRef.current;
+      const now = Date.now();
+      if (
+        hydrationScheduleBootstrapRef.current &&
+        snap &&
+        snap.schemaVersion === 1 &&
+        snap.fingerprint === fp &&
+        snap.hydrationNextAtMs !== null &&
+        snap.hydrationNextAtMs > now + SCHEDULER_SNAPSHOT_SLACK_MS
+      ) {
+        nextMs = snap.hydrationNextAtMs;
+      }
+      hydrationScheduleBootstrapRef.current = false;
 
       if (hitQuietPostponeCap) {
         if (!hydrationQuietPostponeCapWarnedRef.current) {
@@ -497,6 +614,12 @@ export default function HomePage(props: HomePageProps): JSX.Element {
 
       const targetMs = nextMs ?? Date.now() + cfg.hydrationIntervalMinutes * 60_000;
       setHydrationNextAt(targetMs);
+      void saveSchedulerSnapshot({
+        schemaVersion: 1,
+        fingerprint: fp,
+        sedentaryNextAtMs: nextTriggerAtRef.current,
+        hydrationNextAtMs: targetMs
+      });
       const waitMs = Math.max(500, targetMs - Date.now());
       timerId = window.setTimeout(() => {
         if (cancelled) {
@@ -800,16 +923,26 @@ export default function HomePage(props: HomePageProps): JSX.Element {
             textAlign: "center"
           }}
         >
-          <Typography.Text type="secondary">v{appVersion}</Typography.Text>
-          <Button
-            type="link"
-            size="small"
-            aria-label="检查更新"
-            icon={<ReloadOutlined spin={updateBusy} />}
-            onClick={handleCheckForUpdates}
-            disabled={updateBusy}
-            style={{ padding: "0 4px" }}
-          />
+          <Space direction="vertical" size={4} style={{ width: "100%" }}>
+            <div>
+              <Typography.Text type="secondary">v{appVersion}</Typography.Text>
+              <Button
+                type="link"
+                size="small"
+                aria-label="检查更新"
+                icon={<ReloadOutlined spin={updateBusy} />}
+                onClick={handleCheckForUpdates}
+                disabled={updateBusy}
+                style={{ padding: "0 4px" }}
+              />
+            </div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Tooltip title="提醒配置、统计与本地调度快照仅保存在本机应用数据目录，不会上传云端或任何服务器。">
+                <InfoCircleOutlined style={{ marginRight: 6 }} aria-hidden />
+                用户须知：数据仅存本机，不上传云端
+              </Tooltip>
+            </Typography.Text>
+          </Space>
         </div>
       </div>
       <ReminderFullscreenPage

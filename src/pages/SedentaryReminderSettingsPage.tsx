@@ -62,6 +62,21 @@ export default function SedentaryReminderSettingsPage(props: SedentaryReminderSe
           </Col>
         </Row>
 
+        <Row justify="space-between" align="middle">
+          <Col flex="1 1 auto" style={{ minWidth: 0 }}>
+            <Typography.Text strong>解锁视为记录活动</Typography.Text>
+          </Col>
+          <Col flex="none">
+            <Switch
+              checked={config.logActivityOnSessionUnlockEnabled}
+              onChange={(checked) => onChange({ ...config, logActivityOnSessionUnlockEnabled: checked })}
+            />
+          </Col>
+        </Row>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}>
+          开启后，系统从锁屏解锁时自动按「记录活动」重排下次久坐（全屏提醒进行中不会触发）。
+        </Typography.Paragraph>
+
         <Form layout="vertical">
           <Form.Item label={<Typography.Text strong>提醒间隔（分钟，最低1）</Typography.Text>}>
             <InputNumber

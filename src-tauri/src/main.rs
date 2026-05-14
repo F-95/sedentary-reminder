@@ -11,6 +11,9 @@ use tauri::Emitter;
 use tauri::Manager;
 use tray::TrayMenuState;
 
+#[cfg(any(windows, target_os = "macos"))]
+use platform::session_unlock;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_state = AppState::default();
@@ -37,6 +40,8 @@ pub fn run() {
             commands::reminder::list_default_slogans,
             commands::stats::record_stat_event,
             commands::stats::query_stat_events,
+            commands::scheduler_snapshot::load_scheduler_snapshot,
+            commands::scheduler_snapshot::save_scheduler_snapshot,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -60,6 +65,10 @@ pub fn run() {
         .setup(|app| {
             // 中文注释：初始化补丁与插件系统，预留加载入口。
             tray::setup_tray(app).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            #[cfg(any(windows, target_os = "macos"))]
+            if let Err(e) = session_unlock::install_session_unlock_listener(app.handle()) {
+                eprintln!("[sedentary-reminder] 会话解锁监听未启用: {e}");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

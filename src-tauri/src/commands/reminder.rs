@@ -292,7 +292,7 @@ pub fn set_reminder_window_mode(
             .set_always_on_top(false)
             .map_err(|error| format!("取消置顶失败: {error}"))?;
         window
-            .set_size(LogicalSize::new(520.0, 700.0))
+            .set_size(LogicalSize::new(520.0, 800.0))
             .map_err(|error| format!("恢复窗口大小失败: {error}"))?;
         window
             .center()

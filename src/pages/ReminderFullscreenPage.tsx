@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button, Card, Space, Statistic, Typography } from "antd";
 
 export interface ReminderFullscreenPageProps {
@@ -17,12 +18,29 @@ export interface ReminderFullscreenPageProps {
 export default function ReminderFullscreenPage(props: ReminderFullscreenPageProps): JSX.Element | null {
   const { visible, title, reminderText, backgroundUrl, isCounting, remainSeconds, durationMinutes, anchorX, anchorY, onStartActivity } =
     props;
+
+  /** 中文注释：第十版——全屏层拦截 WebView 默认右键菜单（返回/刷新等）。 */
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const block = (e: Event): void => {
+      e.preventDefault();
+    };
+    document.addEventListener("contextmenu", block, true);
+    return () => document.removeEventListener("contextmenu", block, true);
+  }, [visible]);
+
   if (!visible) {
     return null;
   }
 
   return (
     <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       style={{
         position: "fixed",
         inset: 0,

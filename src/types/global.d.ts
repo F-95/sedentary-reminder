@@ -53,6 +53,8 @@ export interface ReminderConfig {
   hydrationReminderEnabled: boolean;
   /** 中文注释：补水提醒间隔分钟（第四版），与久坐间隔同为 1–360。 */
   hydrationIntervalMinutes: number;
+  /** 中文注释：第十版——系统解锁时是否视为「记录活动」并重排久坐下一拍。 */
+  logActivityOnSessionUnlockEnabled: boolean;
 }
 
 export interface ReminderRuntime {

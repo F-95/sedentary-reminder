@@ -55,7 +55,8 @@ export function migrateV1ShapeToBaseConfig(
     lockOnReminderFinishEnabled: true,
     reminderDurationMinutes: 2,
     randomTextEnabled: true,
-    texts: ["该起来活动了，请保护你的肩颈和眼睛。", "走动一下，喝口水，再回来继续高效工作。", "久坐提醒：请立即起身活动。"]
+    texts: ["该起来活动了，请保护你的肩颈和眼睛。", "走动一下，喝口水，再回来继续高效工作。", "久坐提醒：请立即起身活动。"],
+    logActivityOnSessionUnlockEnabled: false
   };
   if (!raw || typeof raw !== "object") {
     return defaults;
@@ -77,7 +78,11 @@ export function migrateV1ShapeToBaseConfig(
         ? clampReminderDurationMinutes(o.reminderDurationMinutes)
         : defaults.reminderDurationMinutes,
     randomTextEnabled: o.randomTextEnabled !== false,
-    texts: filteredTexts.length ? filteredTexts : defaults.texts
+    texts: filteredTexts.length ? filteredTexts : defaults.texts,
+    logActivityOnSessionUnlockEnabled:
+      typeof o.logActivityOnSessionUnlockEnabled === "boolean"
+        ? o.logActivityOnSessionUnlockEnabled
+        : defaults.logActivityOnSessionUnlockEnabled
   };
 }
 
@@ -361,6 +366,32 @@ export function computeNextTriggerWithQuietHours(nowMs: number, config: Reminder
   }
 
   return postponeCandidatePastQuietHours(bestT, winningInterval, config);
+}
+
+/**
+ * 中文注释：第十版——久坐/补水调度快照用指纹；仅含影响「下一拍」计算的配置切片，稳定 JSON 序列化。
+ */
+export function buildSchedulerFingerprint(config: ReminderConfig): string {
+  const quietSorted = [...config.quietHours].sort((a, b) => a.id.localeCompare(b.id));
+  const rulesSorted = [...config.rules].sort((a, b) => a.id.localeCompare(b.id));
+  const payload = {
+    enabled: config.enabled,
+    rules: rulesSorted.map((r) => ({
+      id: r.id,
+      enabled: r.enabled,
+      intervalMinutes: r.intervalMinutes
+    })),
+    quietHoursEnabled: config.quietHoursEnabled,
+    quietHours: quietSorted.map((q) => ({
+      id: q.id,
+      enabled: q.enabled,
+      startMinutes: q.startMinutes,
+      endMinutes: q.endMinutes
+    })),
+    hydrationReminderEnabled: config.hydrationReminderEnabled,
+    hydrationIntervalMinutes: config.hydrationIntervalMinutes
+  };
+  return JSON.stringify(payload);
 }
 
 export function createNewQuietHourRange(): QuietHourRange {
