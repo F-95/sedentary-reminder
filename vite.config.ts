@@ -17,7 +17,8 @@ export default defineConfig({
   server: { port: 1420, strictPort: true, host: "127.0.0.1" },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
-    target: process.env.TAURI_PLATFORM === "windows" ? "chrome105" : "safari13",
+    // 中文注释：略降 Windows 构建目标以兼容较旧 WebView2（Win7/8 等环境常见旧运行时）。
+    target: process.env.TAURI_PLATFORM === "windows" ? "chrome90" : "safari13",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG
   }

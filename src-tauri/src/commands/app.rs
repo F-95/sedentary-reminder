@@ -3,6 +3,9 @@ use tauri::AppHandle;
 
 use crate::tray::TrayMenuState;
 
+/// 中文注释：与 `tauri.conf.json` 中 `identifier` 保持一致，供前端展示与更新通道对齐。
+const APP_BUNDLE_IDENTIFIER: &str = "io.github.f95.sedentary-reminder";
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppInfo {
@@ -19,9 +22,9 @@ fn to_wide_null(s: &str) -> Vec<u16> {
 #[tauri::command]
 pub fn get_app_info() -> AppInfo {
     AppInfo {
-        name: "sedentary-reminder".to_string(),
-        version: "0.1.2".to_string(),
-        app_id: "sedentary-reminder".to_string(),
+        name: env!("CARGO_PKG_NAME").to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        app_id: APP_BUNDLE_IDENTIFIER.to_string(),
     }
 }
 

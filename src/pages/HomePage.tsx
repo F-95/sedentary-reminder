@@ -1,8 +1,9 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ReloadOutlined } from "@ant-design/icons";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { Button, Checkbox, Modal, Space, message } from "antd";
+import { Button, Checkbox, Modal, Space, Typography, message, theme } from "antd";
 import type {
   CloseBehaviorPreference,
   ReminderConfig,
@@ -23,6 +24,7 @@ import {
   EVENT_TRAY_FIELD_TOGGLE,
   exitApp,
   finishActivityAndLock,
+  getAppInfo,
   getReminderRuntime,
   listDefaultSlogans,
   recordStatEvent,
@@ -32,6 +34,7 @@ import {
   syncTrayMenu,
   updateNextTrigger
 } from "@/utils/tauri";
+import { fetchAvailableUpdate, formatUpdaterCheckError, installUpdateAndRelaunch } from "@/utils/appUpdate";
 import {
   computeNextIntervalFireWithQuietHours,
   computeNextTriggerWithQuietHours,
@@ -167,6 +170,11 @@ export default function HomePage(props: HomePageProps): JSX.Element {
   const [hubNowMs, setHubNowMs] = useState<number>(() => Date.now());
   /** 中文注释：第八版——用户「记录活动/跳过本次」后递增，迫使久坐调度 effect 以当前时刻重算下一拍。 */
   const [sedentaryScheduleNonce, setSedentaryScheduleNonce] = useState(0);
+  const { token } = theme.useToken();
+  /** 中文注释：第九版——与后端 get_app_info / 安装包版本一致。 */
+  const [appVersion, setAppVersion] = useState<string>("…");
+  /** 中文注释：第九版——检查或安装更新进行中。 */
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   const bumpStatsRefresh = useCallback((): void => {
     setStatsRefreshKey((k) => k + 1);
@@ -187,6 +195,13 @@ export default function HomePage(props: HomePageProps): JSX.Element {
     }, 1000);
     return () => window.clearInterval(id);
   }, [settingsView]);
+
+  /** 中文注释：第九版——读取安装包语义化版本号供底部栏展示。 */
+  useEffect(() => {
+    void getAppInfo()
+      .then((info) => setAppVersion(info.version))
+      .catch(() => setAppVersion("未知"));
+  }, []);
 
   useEffect(() => {
     if (settingsView === "main") {
@@ -615,6 +630,51 @@ export default function HomePage(props: HomePageProps): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上
   }, [api, config.enabled, nextTriggerAt, reminderVisible]);
 
+  const handleCheckForUpdates = useCallback((): void => {
+    void (async () => {
+      setUpdateBusy(true);
+      try {
+        const update = await fetchAvailableUpdate();
+        if (!update) {
+          api.success("当前已是最新版本");
+          return;
+        }
+        Modal.confirm({
+          title: "发现新版本",
+          width: 480,
+          content: (
+            <div>
+              <Typography.Paragraph style={{ marginBottom: 8 }}>新版本号：{update.version}</Typography.Paragraph>
+              {update.body ? (
+                <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>{update.body}</Typography.Paragraph>
+              ) : null}
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                将下载并安装更新，完成后自动重启应用（Windows 安装过程可能短暂无界面反馈）。
+              </Typography.Paragraph>
+            </div>
+          ),
+          okText: "下载并安装",
+          cancelText: "稍后",
+          onCancel: () => {
+            void update.close();
+          },
+          onOk: async () => {
+            try {
+              await installUpdateAndRelaunch(update);
+            } catch (err) {
+              api.error(`安装更新失败：${formatUpdaterCheckError(String(err))}`);
+              throw err;
+            }
+          }
+        });
+      } catch (e) {
+        api.error(`检查更新失败：${formatUpdaterCheckError(String(e))}`);
+      } finally {
+        setUpdateBusy(false);
+      }
+    })();
+  }, [api]);
+
   const applyCloseToTray = (): void => {
     if (rememberCloseChoice) {
       localStorage.setItem(CLOSE_BEHAVIOR_STORAGE_KEY, "tray");
@@ -663,62 +723,95 @@ export default function HomePage(props: HomePageProps): JSX.Element {
           </Space>
         </Space>
       </Modal>
-      <Space
-        direction="vertical"
-        size="middle"
+      <div
         style={{
+          display: "flex",
+          flexDirection: "column",
           width: "100%",
-          maxHeight: "calc(100vh - 48px)",
-          overflowY: settingsView === "main" ? "hidden" : "auto"
+          minHeight: "calc(100vh - 48px)",
+          boxSizing: "border-box"
         }}
       >
-        {settingsView === "main" ? (
-          <ReminderSettingsPage
-            config={config}
-            nextSedentaryAt={nextTriggerAt}
-            nextHydrationAt={hydrationNextAt}
-            nowMs={hubNowMs}
-            sedentaryFullscreenActive={reminderVisible}
-            onChange={setConfig}
-            onOpenSedentary={() => setSettingsView("sedentary")}
-            onOpenHydration={() => setSettingsView("hydration")}
-            onOpenQuietHours={() => setSettingsView("quiet")}
-            themeMode={themeMode}
-            onThemeModeChange={onThemeModeChange}
-            statsRefreshKey={statsRefreshKey}
-            onOpenStats={() => setSettingsView("stats")}
-            onOpenAuthorBlurb={() => setSettingsView("author")}
-            onSedentaryLogActivity={() => {
-              void handleSedentaryLogActivity();
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <Space
+            direction="vertical"
+            size="middle"
+            style={{
+              width: "100%",
+              flex: 1,
+              minHeight: 0,
+              maxHeight: settingsView === "main" ? "100%" : undefined,
+              overflowY: settingsView === "main" ? "hidden" : "auto"
             }}
-            onSedentarySkipOnce={() => {
-              void handleSedentarySkipOnce();
-            }}
+          >
+            {settingsView === "main" ? (
+              <ReminderSettingsPage
+                config={config}
+                nextSedentaryAt={nextTriggerAt}
+                nextHydrationAt={hydrationNextAt}
+                nowMs={hubNowMs}
+                sedentaryFullscreenActive={reminderVisible}
+                onChange={setConfig}
+                onOpenSedentary={() => setSettingsView("sedentary")}
+                onOpenHydration={() => setSettingsView("hydration")}
+                onOpenQuietHours={() => setSettingsView("quiet")}
+                themeMode={themeMode}
+                onThemeModeChange={onThemeModeChange}
+                statsRefreshKey={statsRefreshKey}
+                onOpenStats={() => setSettingsView("stats")}
+                onOpenAuthorBlurb={() => setSettingsView("author")}
+                onSedentaryLogActivity={() => {
+                  void handleSedentaryLogActivity();
+                }}
+                onSedentarySkipOnce={() => {
+                  void handleSedentarySkipOnce();
+                }}
+              />
+            ) : settingsView === "stats" ? (
+              <StatisticsPage onBack={() => setSettingsView("main")} />
+            ) : settingsView === "author" ? (
+              <AuthorBlurbPage onBack={() => setSettingsView("main")} />
+            ) : settingsView === "sedentary" ? (
+              <SedentaryReminderSettingsPage
+                config={config}
+                onChange={setConfig}
+                onBack={() => setSettingsView("main")}
+              />
+            ) : settingsView === "quiet" ? (
+              <QuietHoursSettingsPage
+                config={config}
+                onChange={setConfig}
+                onBack={() => setSettingsView("main")}
+              />
+            ) : (
+              <HydrationSettingsPage
+                config={config}
+                onChange={setConfig}
+                onBack={() => setSettingsView("main")}
+              />
+            )}
+          </Space>
+        </div>
+        <div
+          style={{
+            flexShrink: 0,
+            paddingTop: 10,
+            borderTop: `1px solid ${token.colorSplit}`,
+            textAlign: "center"
+          }}
+        >
+          <Typography.Text type="secondary">v{appVersion}</Typography.Text>
+          <Button
+            type="link"
+            size="small"
+            aria-label="检查更新"
+            icon={<ReloadOutlined spin={updateBusy} />}
+            onClick={handleCheckForUpdates}
+            disabled={updateBusy}
+            style={{ padding: "0 4px" }}
           />
-        ) : settingsView === "stats" ? (
-          <StatisticsPage onBack={() => setSettingsView("main")} />
-        ) : settingsView === "author" ? (
-          <AuthorBlurbPage onBack={() => setSettingsView("main")} />
-        ) : settingsView === "sedentary" ? (
-          <SedentaryReminderSettingsPage
-            config={config}
-            onChange={setConfig}
-            onBack={() => setSettingsView("main")}
-          />
-        ) : settingsView === "quiet" ? (
-          <QuietHoursSettingsPage
-            config={config}
-            onChange={setConfig}
-            onBack={() => setSettingsView("main")}
-          />
-        ) : (
-          <HydrationSettingsPage
-            config={config}
-            onChange={setConfig}
-            onBack={() => setSettingsView("main")}
-          />
-        )}
-      </Space>
+        </div>
+      </div>
       <ReminderFullscreenPage
         visible={reminderVisible}
         title="久坐提醒"

@@ -17,6 +17,8 @@ pub fn run() {
     let tray_menu_state = TrayMenuState::default();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .manage(app_state)
         .manage(tray_menu_state)

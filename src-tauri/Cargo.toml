@@ -1,7 +1,7 @@
 [package]
 # crate 名称必须为 ASCII，避免 Windows 构建产物路径与 CI 异常
 name = "sedentary-reminder"
-version = "0.1.8"
+version = "0.1.9"
 description = "Sedentary Reminder - 久坐提醒桌面应用"
 authors = ["you"]
 edition = "2021"
@@ -17,6 +17,8 @@ serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
 tauri = { version = "2.0.0", features = ["tray-icon", "image-png"] }
 tauri-plugin-notification = "2.0.0"
+tauri-plugin-process = "2.0.0"
+tauri-plugin-updater = "2.0.0"
 thiserror = "1.0.50"
 tokio = { version = "1.35.0", features = ["full"] }
 libloading = "0.8.1"

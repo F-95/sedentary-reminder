@@ -16,6 +16,8 @@
     "core:event:allow-emit",
     "core:event:allow-emit-to",
     "notification:default",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "updater:default",
+    "process:default"
   ]
 }

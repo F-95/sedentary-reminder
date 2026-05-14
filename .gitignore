@@ -11,6 +11,9 @@ src-tauri/target/
 .env.*
 !.env.example
 
+# 中文注释：Tauri 更新签名私钥（勿提交）；公钥见 tauri.conf.json 或 keys/*.pub
+src-tauri/keys/*.key
+
 # ========== 不应提交（补丁 / 插件运行时二进制与打包前端）==========
 # 说明：manifest.json、rollback.json、schema 等元数据可提交；已编译的 backend/、frontend/ 为运行时产物，勿入库。
 patches/**/backend/
