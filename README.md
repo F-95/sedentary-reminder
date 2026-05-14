@@ -93,8 +93,12 @@ npm run tauri build
 
 | Secret 名称 | 是否必填 | 说明 |
 |-------------|----------|------|
-| `TAURI_SIGNING_PRIVATE_KEY` | **必填** | minisign 私钥的**完整文件内容**（与 `tauri.conf.json` 里 `plugins.updater.pubkey` 成对；通常即本机 `src-tauri/keys/updater.key` 全文，勿提交该文件到 Git）。 |
+| `TAURI_SIGNING_PRIVATE_KEY` | **必填** | **单行 Base64** 字符串：与 `npm run tauri signer generate -w …` 生成的 **`*.key` 文件全文一致**（通常以 `dW50cnVzdGVk` 开头）。**不要**粘贴 `*.pub` 的两行明文，**不要**粘贴「解密后」的多行 minisign 文本；否则构建会报 **`Invalid symbol 32, offset 9`**（Base64 解码遇到空格）。 |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 可选 | 生成密钥时若设置了密码则填写，否则可省略。 |
+
+**GitHub Secret 粘贴技巧**：用记事本/VS Code 打开 `src-tauri/keys/updater.key`，**全选一行**复制；在 GitHub 新建 Secret 的「Value」里粘贴后**不要**再敲回车增加第二行。若仍失败，可用 `gh secret set TAURI_SIGNING_PRIVATE_KEY < src-tauri/keys/updater.key`（勿将私钥提交进仓库）。
+
+**`plugins.updater.pubkey`**：须为与私钥成对的 **Base64 单行**（与 `*.pub` 文件内容格式一致，即 Tauri CLI 写入的编码形式）；**不要**写 minisign 两行明文。
 
 本地发版构建同样需在 shell 中导出上述环境变量（Tauri **不会**从 `.env` 读取签名变量）。详见 [Tauri 文档：Signing updates](https://v2.tauri.app/plugin/updater/#signing-updates)。
 

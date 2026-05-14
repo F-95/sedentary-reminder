@@ -59,7 +59,7 @@
       "endpoints": [
         "https://github.com/F-95/sedentary-reminder/releases/latest/download/latest.json"
       ],
-      "pubkey": "untrusted comment: minisign public key: 5EDA0E69BE37D028\nRWQo0De+aQ7aXigJ+52OTLVhypR9cHsOPVlan6Uu3PrIw664WJ6CkQ6o\n",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFREEwRTY5QkUzN0QwMjgKUldRbzBEZSthUTdhWGlnSis1Mk9UTFZoeXBSOWNIc09QVmxhbjZVdTNQckl3NjY0V0o2Q2tRNm8K",
       "windows": {
         "installMode": "passive"
       }

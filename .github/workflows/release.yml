@@ -68,10 +68,29 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
-            echo '::error::缺少 Actions Secret「TAURI_SIGNING_PRIVATE_KEY」。请在仓库 Settings → Secrets and variables → Actions 中新建该 secret，值为与本仓库 tauri.conf.json 中公钥成对的 minisign 私钥全文（通常即本地 src-tauri/keys/updater.key 文件内容）。可选：TAURI_SIGNING_PRIVATE_KEY_PASSWORD。详见 README「发布与 CI」。'
-            exit 1
-          fi
+          node <<'NODE'
+          const k = process.env.TAURI_SIGNING_PRIVATE_KEY ?? "";
+          const trimmed = k.replace(/\r/g, "").trim();
+          if (!trimmed) {
+            console.error(
+              "::error::缺少 TAURI_SIGNING_PRIVATE_KEY。请在 GitHub → Settings → Secrets → Actions 中配置，详见 README「发布与 CI」。"
+            );
+            process.exit(1);
+          }
+          const lines = k.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+          if (lines.length !== 1) {
+            console.error(
+              "::error::TAURI_SIGNING_PRIVATE_KEY 必须为「单行」Base64（与 src-tauri/keys/updater.key 一致）。不要粘贴 .pub 的两行明文或多行 minisign 文本；若出现 Invalid symbol 32, offset 9，多为误粘明文。"
+            );
+            process.exit(1);
+          }
+          if (!/^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
+            console.error(
+              "::error::TAURI_SIGNING_PRIVATE_KEY 不是合法 Base64。请复制 updater.key 整行（通常以 dW50cnVzdGVk 开头）。"
+            );
+            process.exit(1);
+          }
+          NODE
 
       - name: 构建并发布 Release
         uses: tauri-apps/tauri-action@action-v0.6.2
