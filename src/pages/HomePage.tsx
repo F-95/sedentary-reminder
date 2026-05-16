@@ -37,7 +37,14 @@ import {
   syncTrayMenu,
   updateNextTrigger
 } from "@/utils/tauri";
-import { fetchAvailableUpdate, formatUpdaterCheckError, installUpdateAndRelaunch } from "@/utils/appUpdate";
+import {
+  fetchAvailableUpdate,
+  formatUpdateBodyForDialog,
+  formatUpdaterCheckError,
+  githubReleaseNotesUrl,
+  installUpdateAndRelaunch,
+  shouldShowGithubFullReleaseNotesLink
+} from "@/utils/appUpdate";
 import {
   buildSchedulerFingerprint,
   computeNextIntervalFireWithQuietHours,
@@ -762,14 +769,41 @@ export default function HomePage(props: HomePageProps): JSX.Element {
           api.success("当前已是最新版本");
           return;
         }
+        const releaseNotesRaw = update.body?.trim() ?? "";
+        const releaseNotesDisplay = formatUpdateBodyForDialog(releaseNotesRaw);
+        const showGithubNotes = shouldShowGithubFullReleaseNotesLink(releaseNotesRaw, releaseNotesDisplay);
+        const githubNotesUrl = githubReleaseNotesUrl(update.version);
+
         Modal.confirm({
           title: "发现新版本",
-          width: 480,
+          width: 440,
           content: (
             <div>
               <Typography.Paragraph style={{ marginBottom: 8 }}>新版本号：{update.version}</Typography.Paragraph>
-              {update.body ? (
-                <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>{update.body}</Typography.Paragraph>
+              {releaseNotesDisplay ? (
+                <div
+                  style={{
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    marginBottom: 8,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "var(--ant-color-fill-quaternary, rgba(0,0,0,0.04))",
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word"
+                  }}
+                >
+                  {releaseNotesDisplay}
+                </div>
+              ) : null}
+              {showGithubNotes ? (
+                <Typography.Paragraph style={{ marginBottom: 8 }}>
+                  <Typography.Link href={githubNotesUrl} target="_blank" rel="noopener noreferrer">
+                    在 GitHub 查看完整说明
+                  </Typography.Link>
+                </Typography.Paragraph>
               ) : null}
               <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                 将下载并安装更新，完成后自动重启应用（Windows 安装过程可能短暂无界面反馈）。

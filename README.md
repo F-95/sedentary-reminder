@@ -2,7 +2,7 @@
 
 跨平台桌面应用：按间隔提醒起身活动，降低久坐健康风险。技术栈为 **Tauri 2**、**Rust**、**React**、**Vite**、**TypeScript**、**Ant Design**。
 
-**当前版本**：`0.1.9` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
+**当前版本**：`0.1.11` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
 
 ## 功能特性
 
@@ -88,6 +88,8 @@ npm run tauri build
 ## 发布与 CI（维护者）
 
 发版前：`CHANGELOG.md` 写入 `## [x.y.z]` 且与即将推送的标签一致；`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 三处 **version** 对齐。推送 `vx.y.z` 后由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 构建并发布 Windows 安装包。
+
+**应用内「检查更新」弹窗**：GitHub Release 正文会作为 updater 的 `body` 展示；建议正文写 **3～6 条用户可见要点**，完整技术细节、命令与文件名等放在 `CHANGELOG.md` 或单独小节「### 构建与发布」（应用内会自动截断该段及之后，并可在弹窗中链到 Release 全文）。
 
 **Tauri 自动更新签名（必配）**：本仓库在 `tauri.conf.json` 中启用了 **`bundle.createUpdaterArtifacts`** 并配置了 **updater 公钥**，因此 **GitHub Actions 构建阶段必须能读取私钥**，否则会报错：`A public key has been found, but no private key`。请在 GitHub 仓库 **Settings → Secrets and variables → Actions** 中新建 **Repository secrets**：
 
