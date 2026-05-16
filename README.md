@@ -2,7 +2,7 @@
 
 跨平台桌面应用：按间隔提醒起身活动，降低久坐健康风险。技术栈为 **Tauri 2**、**Rust**、**React**、**Vite**、**TypeScript**、**Ant Design**。
 
-**当前版本**：`0.1.12` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
+**当前版本**：`0.1.13` · 变更见 [`CHANGELOG.md`](CHANGELOG.md)
 
 ## 功能特性
 
