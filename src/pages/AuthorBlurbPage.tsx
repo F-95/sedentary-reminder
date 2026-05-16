@@ -1,4 +1,5 @@
-import { Card, Space, Typography } from "antd";
+import { Card, Image, Space, Typography } from "antd";
+import charlanWeixinBanner from "@/assets/charlan-weixin-banner.png";
 import SubSettingsTopBar from "@/components/SubSettingsTopBar";
 
 export interface AuthorBlurbPageProps {
@@ -26,6 +27,17 @@ export default function AuthorBlurbPage(props: AuthorBlurbPageProps): JSX.Elemen
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
             我是乘澜，微信公众号：乘澜 charlan
           </Typography.Paragraph>
+          <div style={{ textAlign: "center", width: "100%", marginTop: 8 }}>
+            <Image
+              src={charlanWeixinBanner}
+              alt="乘澜 charlan 微信公众号，微信搜一搜"
+              preview={false}
+              style={{ maxWidth: 400, width: "100%" }}
+            />
+            <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+              扫码或打开微信搜一搜「乘澜 charlan」
+            </Typography.Text>
+          </div>
         </Space>
       </Card>
     </Space>
