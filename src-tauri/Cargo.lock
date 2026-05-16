@@ -3172,7 +3172,7 @@ dependencies = [
 
 [[package]]
 name = "sedentary-reminder"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "core-foundation-sys",
  "libloading 0.8.9",
